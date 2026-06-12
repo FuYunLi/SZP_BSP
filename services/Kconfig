@@ -1,0 +1,9 @@
+menu "Services Configuration"
+
+    config WIFI_SERVICE_RECONNECT_MAX
+        int "WiFi Max Reconnect Retries"
+        default 5
+        help
+            Maximum number of reconnect attempts before giving up.
+
+endmenu

@@ -1,0 +1,9 @@
+menu "Board Support Package (BSP) Configuration"
+
+    config BSP_KEY_BOOT_GPIO_NUM
+        int "BSP BOOT Key GPIO Number"
+        default 0
+        help
+            GPIO pin number connected to the BOOT key.
+
+endmenu

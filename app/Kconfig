@@ -1,0 +1,16 @@
+menu "App Configuration"
+
+    config APP_DEFAULT_VOLUME
+        int "Default Audio Volume"
+        default 5
+        range 0 10
+        help
+            The default playback volume for the word card application.
+
+    config APP_ENABLE_DEBUG_CONSOLE
+        bool "Enable Application Debug Console"
+        default y
+        help
+            Enable or disable debug CLI console on startup.
+
+endmenu
