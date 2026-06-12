@@ -1,0 +1,5 @@
+{
+  "tools": {
+    "idf-activate": "/home/liyun/esp/v5.5.1/esp-idf/export.sh"
+  }
+}

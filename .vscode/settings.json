@@ -13,6 +13,6 @@
   "clangd.arguments": [
     "--background-index",
     "--query-driver=**",
-    "--compile-commands-dir=/home/liyun/esp/projects/WORD_CARD/V1/word_card/build"
+    "--compile-commands-dir=/home/liyun/esp/projects/LCSZP/SZP_BSP/V1/build"
   ]
 }

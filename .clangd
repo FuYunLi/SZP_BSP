@@ -1,4 +1,2 @@
 CompileFlags:
-    Remove: [-f*, -m*]
-    CompilationDatabase: build
-
+  CompilationDatabase: "build"
