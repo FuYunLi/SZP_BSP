@@ -7,32 +7,65 @@
 
 ---
 
-## 1. 核心设计与组件化架构
+## 1. 核心设计与分层架构
 
-ESP-IDF 基于组件（Component）的机制进行构建。项目所有的功能模块均应当实现为独立的组件，避免将大量代码堆积在 `main` 目录下。
+ESP-IDF 工程采用多级组件化分层开发，以实现最大程度的驱动复用与应用层解耦。
 
-### 1.1 架构层次划分
+### 1.1 架构层次划分与工程目录结构
+
+项目目录树如下所示：
 
 ```
-┌─────────────────────────────────────────────────────────────┐
-│                          应用层 (APP)                       │
-│        位置：main/ 目录，负责系统调度、任务分发与业务逻辑     │
-├─────────────────────────────────────────────────────────────┤
-│                       板级服务层 (Board)                     │
-│    位置：components/bsp/，前缀 bsp_，绑定特定开发板引脚       │
-├─────────────────────────────────────────────────────────────┤
-│                       芯片驱动层 (Driver)                    │
-│ 位置：components/dev_devices/，前缀 dev_，提供纯芯片协议封装  │
-├─────────────────────────────────────────────────────────────┤
-│                       硬件抽象层 (Interface)                 │
-│      直接使用 ESP-IDF 原生 Driver APIs (如 driver/gpio.h)    │
-└─────────────────────────────────────────────────────────────┘
+MyProject/
+├── CMakeLists.txt            # 顶层构建配置，声明 EXTRA_COMPONENT_DIRS
+├── sdkconfig.defaults        # 项目默认配置固化
+├── main/                     # 应用层入口（IDF默认要求，可极简化）
+│   ├── CMakeLists.txt
+│   └── main.c                # 仅调用 app_init() 启动应用层核心逻辑
+├── app/                      # 应用层核心逻辑（平级组件）
+│   ├── CMakeLists.txt
+│   ├── Kconfig               # 应用级全局配置（如业务开关）
+│   ├── include/              # 对外暴露的应用层接口（供main或跨任务调用）
+│   │   └── app_ui.h
+│   └── app_ui.c
+├── services/                 # 服务层/中间件（平级组件）
+│   ├── CMakeLists.txt        # 聚合管理子服务（如WiFi、MQTT、OTA）
+│   ├── Kconfig               # 服务组件配置菜单
+│   ├── wifi_service/
+│   │   ├── include/
+│   │   │   └── wifi_service.h
+│   │   └── wifi_service.c
+│   └── mqtt_service/
+├── bsp/                      # 板级支持包与驱动组件（平级组件）
+│   ├── CMakeLists.txt        # 聚合管理底层驱动（如LED、Key、Sensor）
+│   ├── Kconfig.projbuild     # 板级引脚与硬件配置（全局可见）
+│   ├── led/
+│   │   ├── include/
+│   │   │   └── bsp_led.h     # 统一抽象接口，隐藏GPIO细节
+│   │   └── bsp_led.c
+│   └── key/
+├── managed_components/       # 乐鑫官方或第三方托管组件（自动生成，勿手动改）
+└── build/                    # 编译输出产物（不纳入Git）
 ```
 
-- **应用层 (APP)**：负责系统级状态机调度与任务派发。仅能包含 `main/` 目录下的源文件，只能调用 `bsp_` 接口，**禁止**直接调用芯片驱动层接口。
-- **板级服务层 (BSP)**：前缀 `bsp_`。负责将物理开发板的 GPIO 引脚、外设总线句柄与板载硬件进行绑定，并向应用层提供通用的初始化与交互接口。
-- **芯片驱动层 (Driver)**：前缀 `dev_` 或芯片型号。属于纯芯片级驱动代码（如 `dev_st7789.c`），不硬编码物理引脚，通过传入配置结构体或总线句柄完成交互，确保驱动可无缝复用。
-- **硬件抽象层 (HAL)**：直接调用 ESP-IDF 原生驱动接口（如 `driver/spi_master.h`），禁止编写无实质逻辑的外设包装层。
+各层级职责划分：
+* **入口层 (main)**：只包含系统启动引导代码（如 `app_main`），负责全局基础环境的初始化（如 NVS、Flash 等），并调用 `app_init()` 启动应用层核心逻辑。
+* **应用层 (app)**：业务逻辑的核心位置，实现各种软件交互逻辑（如 UI、背词管理、拼写判定），通过调用 `services/` 或 `bsp/` 提供的接口，实现应用逻辑与底层硬件及通信协议的解耦。
+* **服务层 (services)**：包含系统中间件与通信服务（如 Wi-Fi 连接、MQTT 通信、OTA 固件升级），通过 CMake 聚合管理这些子服务。
+* **板级支持层 (bsp)**：负责封装底层的硬件驱动与板级抽象（如 LED、按键、传感器驱动）。内部的物理引脚与底层硬件配置通过 `Kconfig.projbuild` 定义，并通过统一抽象的接口（如 `bsp_led.h`）对上层隐藏 GPIO 细节。
+* **第三方管理组件 (managed_components)**：通过 `idf_component.yml` 自动下载的成熟官方及社区开源驱动包，由包管理器管理，不做二次修改。
+
+### 1.2 编译目录注册规范
+为了支持根目录的 `app`、`services` 以及 `bsp` 被 ESP-IDF 正确编译，必须在项目根目录下的 `CMakeLists.txt` 中显式指定 `EXTRA_COMPONENT_DIRS` 注册这三个自定义目录：
+```cmake
+cmake_minimum_required(VERSION 3.16)
+
+# 将自定义顶层文件夹注册为 ESP-IDF 组件搜索路径
+set(EXTRA_COMPONENT_DIRS "app" "services" "bsp")
+
+include($ENV{IDF_PATH}/tools/cmake/project.cmake)
+project(word_card)
+```
 
 ### 1.3 驱动与外部组件引入原则
 
@@ -43,9 +76,9 @@ ESP-IDF 基于组件（Component）的机制进行构建。项目所有的功能
    - 优先通过 ESP-IDF 包管理器（IDF Component Manager）引入。在组件目录下创建 `idf_component.yml` 文件，声明对官方仓库组件的依赖（例如 `espressif/esp_lcd_st7789`）。由构建系统自动下载和管理生命周期。
 2. **第二优先级：社区成熟开源方案**
    - 若官方组件库中没有，优先选择 GitHub 活跃度高、经过验证的开源驱动库（例如 LibDriver、芯片厂商官方库等）。
-   - **导入规范**：应将开源方案下载后放置于项目 `components/` 下的独立组件中（或统一放入 `components/third_party/` 目录），并保持其源码原貌以利于后期跟线升级；绝不能将其源码零散地混入 `main/` 或本地 `dev_devices` 组件中。
+   - **导入规范**：应将开源方案下载并放置于项目中合适的独立组件中（例如放置在 `bsp/` 下独立的驱动目录），并保持其源码原貌以利于后期跟线升级；绝不能将其源码零散地混入 `main/` 或本地业务组件中。
 3. **第三优先级：自研开发**
-   - 仅在官方及社区均无可用、或已有方案存在无法解决的致命缺陷时，方可自研驱动。自研驱动必须严格遵循本规范的 `dev_` 芯片驱动层规范。
+   - 仅在官方及社区均无可用、或已有方案存在无法解决的致命缺陷时，方可自研驱动。自研芯片驱动命名必须遵循本规范，不带任何额外前缀，以芯片型号直接命名。
 
 ---
 
@@ -82,11 +115,28 @@ idf_component_register(
 - **`REQUIRES` (公有依赖)**：如果组件的头文件（`.h`）中引入了其他组件的头文件，必须将其放入 `REQUIRES`。
 - **`PRIV_REQUIRES` (私有依赖)**：如果仅在组件的源文件（`.c`）中引入了其他组件的头文件，必须将其放入 `PRIV_REQUIRES` 以减少编译依赖链。
 
-### 2.2 Kconfig 与菜单配置规范
+### 2.2 Kconfig 分层配置管理规范
 
-为了支持通过 `idf.py menuconfig` 动态修改项目参数，通用配置应写入 Kconfig：
-- 组件级配置：在组件根目录下创建 `Kconfig` 文件，定义专属配置菜单。
-- 命名空间：Kconfig 中的配置项必须带组件前缀（如 `config WORD_CARD_LCD_BACKLIGHT_PIN`）。
+为了支持通过 `idf.py menuconfig` 动态修改项目参数与进行模块开关，Kconfig 采用分层结构进行管理：
+
+#### 2.2.1 应用层配置 (app/Kconfig)
+* **原则**：定义应用级别的全局功能、业务开关及默认业务常数（如是否启用调试控制台 `esp_console`、云端服务器 URL、应用初始音量等）。
+* **呈现位置**：出现在 `menuconfig` 的 `Component config -> app` 菜单下。
+
+#### 2.2.2 服务层配置 (services/Kconfig)
+* **原则**：配置服务层中间件参数（如 Wi-Fi 重连次数、MQTT 维持连接时间、OTA 服务器端口等）。
+* **呈现位置**：出现在 `menuconfig` 的 `Component config -> services` 菜单下。
+
+#### 2.2.3 板级引脚与硬件配置 (bsp/Kconfig.projbuild)
+* **原则**：定义开发板本身的硬件引脚配置、背光控制模式选择、音频外设时钟等硬件强相关参数。使用 `Kconfig.projbuild` 使其配置项对所有组件全局可见。
+* **呈现位置**：直接以顶级主菜单形式呈现在 `menuconfig` 的根目录下，便于开发者修改引脚与基本硬件定义。
+
+#### 2.2.4 命名空间规范
+所有 Kconfig 配置选项必须遵守命名空间前缀限制以防变量污染：
+- 板级硬件/引脚配置项前缀：`config BSP_`（如 `BSP_LED_GPIO_NUM`）
+- 服务层配置项前缀：`config <SERVICE_NAME>_`（如 `WIFI_SERVICE_RECONNECT_MAX`）
+- 应用层配置项前缀：`config APP_`（如 `APP_DEFAULT_VOLUME`）
+- 纯芯片驱动配置项前缀：`config <CHIP_NAME>_`（如 `PCA9557_I2C_SPEED`）
 
 ### 2.3 配置基准管理 (`sdkconfig.defaults`)
 
@@ -99,15 +149,18 @@ idf_component_register(
 
 ### 3.1 文件命名
 
-- 板级服务：`bsp_<功能>.c/h`（如 `bsp_lcd.c`、`bsp_key.c`）
-- 芯片驱动：`dev_<芯片>.c/h`（如 `dev_st7789.c`、`dev_w25q.c`）
-- 业务任务：`task_<业务>.c/h`（如 `task_ui.c`）
+- **应用层文件**：`app_<功能>.c/h`（如 `app_ui.c`、`app_init.c`）
+- **服务层文件**：`<服务名>.c/h`（如 `wifi_service.c`、`mqtt_service.c`）
+- **板级抽象/底层驱动**：`bsp_<外设>.c/h`（如 `bsp_led.c`、`bsp_key.c`）
+- **自研芯片驱动**：直接以芯片型号命名，无任何前缀（如 `pca9557.c`、`st7789.c`）
 
 ### 3.2 函数命名
 
-- 板级服务函数：`bsp_<模块>_<动作>`（如 `bsp_lcd_init()`、`bsp_key_read()`）
-- 芯片驱动函数：`<芯片>_<动作>`（如 `st7789_init()`）
-- 私有函数：`static` 声明并使用 `s_` 前缀（如 `static void s_st7789_write_cmd()`）
+- **应用层函数**：`app_<模块>_<动作>`（如 `app_ui_start()`）
+- **服务层函数**：`<服务名>_<动作>`（如 `wifi_service_connect()`）
+- **板级服务函数**：`bsp_<外设>_<动作>`（如 `bsp_led_on()`、`bsp_key_read()`）
+- **芯片驱动函数**：`<芯片>_<动作>`（如 `pca9557_init()`）
+- **私有函数**：`static` 声明并使用 `s_` 前缀（如 `static void s_pca9557_write_reg()`）
 
 ### 3.3 变量与宏定义
 
