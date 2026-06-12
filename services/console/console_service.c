@@ -1,30 +1,11 @@
 #include "console_service.h"
+#include "esp_console.h"
 #include <stdio.h>
 #include <string.h>
-#include "esp_console.h"
 #include "esp_log.h"
 #include "driver/uart.h"
 
 static const char *TAG = "console_svc";
-
-/* 版本查询命令的回调函数 */
-static int do_version_cmd(int argc, char **argv)
-{
-    printf("立创实战派 S3 BSP v1.0.0\n");
-    return 0;
-}
-
-/* 注册系统级的通用诊断指令 */
-static void register_system_commands(void)
-{
-    const esp_console_cmd_t cmd = {
-        .command = "version",
-        .help = "Get system/BSP version information",
-        .hint = NULL,
-        .func = &do_version_cmd,
-    };
-    ESP_ERROR_CHECK(esp_console_cmd_register(&cmd));
-}
 
 /* ================================================================
  * 公开接口实现
@@ -50,9 +31,6 @@ esp_err_t console_service_start(void)
         ESP_LOGE(TAG, "Failed to create REPL UART: %s", esp_err_to_name(err));
         return err;
     }
-
-    // 注册自定义的命令
-    register_system_commands();
 
     // 启动 REPL 交互环境
     err = esp_console_start_repl(repl);
