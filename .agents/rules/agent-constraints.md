@@ -59,21 +59,23 @@ git merge / git rebase
 2. **提交日志规范**：提交日志（Git commit message）必须全部使用**中文**编写。必须采用约定式提交（Conventional Commits）结构（例如：`feat(board): 新增 bsp_lcd 驱动`），并在正文中说明**设计意图**、**变更细节**与**技术细节**。
 3. **停止与确认**：遇到任何有歧义的开发方案或编译报错，必须立即停止并询问用户，禁止静默处理或连续盲目修改代码尝试修复。
 
-### 3.2 ESP-IDF 编译与烧录工作流
+### 3.2 ESP-IDF 编译、烧录与调试工作流
 
-本工程为 native 命令行项目，**不需要任何自定义 build/flash 脚本（如 python wrapper）**，Agent 应直接使用 ESP-IDF 原生的 `idf.py` 工具链。
+为了防范由于环境变量丢失（如未执行 `export.sh`）或多平台编译工具差异导致的编译/烧录阻断，并提供结构化的错误解析与自愈，**Agent 在需要执行构建、烧录、调试或监控时，应优先调用工程内置的专用 Skills 进行调用**：
 
-#### 编译规范 (`idf.py build`)
-- **编译成功时**，Agent 必须解析并简要汇报以下信息：
-  - 固件大小：App binary 的大小及分区占用情况（可运行 `idf.py size` 获取）。
-  - 目标芯片（Target）：如 `esp32s3`。
-- **编译失败时**，Agent 必须立即停止，并将终端输出的详细错误日志（文件名、行号、具体 C 编译器报错信息）展示给用户。
-  - **禁止自动修改代码尝试修复**。
-  - **必须先向用户分析原因**，在用户确认修复方案后，方可进行修改。
+#### 1. 编译规范 (优先调用 `build-idf` 技能)
+- Agent 编译或切换目标芯片时，应优先使用 `build-idf` 技能中自带的底层脚本进行调用，以保证环境自动激活：
+  - 探测环境：`python3 .agents/skills/build-idf/scripts/idf_builder.py --detect`
+  - 设置芯片：`python3 .agents/skills/build-idf/scripts/idf_builder.py --set-target <target> --project <path>`
+  - 编译工程：`python3 .agents/skills/build-idf/scripts/idf_builder.py --build --project <path>`
+- 只有在上述脚本报环境故障或发生无法自动处理的底层异常时，方可在用户授权后在已激活的环境中使用原生命令行 `idf.py build` 执行补充操作。
+- **编译结果汇报**：
+  - 编译成功时：汇报固件大小（ELF/BIN）以及芯片目标。
+  - 编译失败时：展示结构化的 `failure_category` 与关键出错日志，**禁止盲目修改代码重试**，应先向用户分析原因，获得确认后再修改。
 
-#### 烧录与调试规范 (`idf.py flash` & `idf.py monitor`)
-- 烧录必须由用户决定。烧录命令通常为 `idf.py flash`。
-- 调试与日志查看看板使用 `idf.py monitor` 或直接使用 `run_command` 的后台输出监视。不需要额外的串口工具，Agent 可直接在终端交互中分析运行报错。
+#### 2. 烧录与调试规范 (优先调用 `flash-idf` / `serial-monitor` 技能)
+- **烧录程序**：需优先通过 `flash-idf` 技能的 `idf_flasher.py` 进行烧录（例：`python3 .agents/skills/flash-idf/scripts/idf_flasher.py --flash --project <path> --port <port>`）。必须在获得用户授权后方可执行。
+- **监控串口日志**：在获取运行日志时，应优先使用 `serial-monitor` 技能进行日志抓取与运行状态监控。在长连接调试中，也可配合使用 `idf.py monitor` 命令行。
 
 ---
 
