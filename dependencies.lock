@@ -23,6 +23,30 @@ dependencies:
       registry_url: https://components.espressif.com
       type: service
     version: 0.5.3
+  espressif/esp_lcd_touch:
+    component_hash: 3f85a7d95af876f1a6ecca8eb90a81614890d0f03a038390804e5a77e2caf862
+    dependencies:
+    - name: idf
+      require: private
+      version: '>=4.4.2'
+    source:
+      registry_url: https://components.espressif.com
+      type: service
+    version: 1.2.1
+  espressif/esp_lcd_touch_ft5x06:
+    component_hash: 8ae101b4a321b6327d98751b049e3c7fff2718ad04d676259369ff85d4edbcdf
+    dependencies:
+    - name: espressif/esp_lcd_touch
+      registry_url: https://components.espressif.com
+      require: public
+      version: ^1.2.0
+    - name: idf
+      require: private
+      version: '>=5.2'
+    source:
+      registry_url: https://components.espressif.com/
+      type: service
+    version: 1.1.0~1
   idf:
     source:
       type: idf
@@ -39,7 +63,8 @@ dependencies:
     version: 1.22.1
 direct_dependencies:
 - espressif/button
+- espressif/esp_lcd_touch_ft5x06
 - joltwallet/littlefs
-manifest_hash: 254928479139b860eb2e8dd2c18fd6847c79ce9f4f1ef74d9ebb7288537ce0c6
+manifest_hash: f6d8aac575b77a47fe9279e8abd9c485c93c4f97c3f78812a2f06b2be438b04c
 target: esp32s3
 version: 2.0.0
