@@ -11,6 +11,8 @@
 #include <stdlib.h>
 #include <string.h>
 #include "esp_log.h"
+#include "driver/gpio.h"
+#include "bsp_key.h"
 
 static const char *TAG = "app_cli";
 
@@ -48,6 +50,14 @@ static int do_backlight_cmd(int argc, char **argv)
     return 0;
 }
 
+/* 按键状态查询命令的回调函数 */
+static int do_key_cmd(int argc, char **argv)
+{
+    bool pressed = bsp_key_is_pressed();
+    printf("BOOT Key status: %s (Level: %d)\n", pressed ? "PRESSED" : "RELEASED", gpio_get_level(0));
+    return 0;
+}
+
 /* 注册系统级的通用诊断指令 */
 static void register_system_commands(void)
 {
@@ -66,6 +76,14 @@ static void register_system_commands(void)
         .func = &do_backlight_cmd,
     };
     ESP_ERROR_CHECK(esp_console_cmd_register(&backlight_cmd));
+
+    const esp_console_cmd_t key_cmd = {
+        .command = "key",
+        .help = "Get BOOT key level and pressed status",
+        .hint = NULL,
+        .func = &do_key_cmd,
+    };
+    ESP_ERROR_CHECK(esp_console_cmd_register(&key_cmd));
 }
 
 /* ================================================================
