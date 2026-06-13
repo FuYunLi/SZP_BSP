@@ -6,6 +6,7 @@
 #include "bsp_littlefs.h"
 #include "bsp_sdcard.h"
 #include "bsp_power.h"
+#include "bsp_lcd.h"
 #include "qmi8658.h"
 #include "pca9557.h"
 #include "esp_log.h"
@@ -89,6 +90,18 @@ void app_init(void)
     if (ret != ESP_OK)
     {
         ESP_LOGE(TAG, "Failed to initialize QMI8658A IMU (%s)", esp_err_to_name(ret));
+    }
+
+    // 5.6 初始化板载 LCD 屏幕驱动并默认清屏
+    ret = bsp_lcd_init();
+    if (ret == ESP_OK)
+    {
+        bsp_lcd_clear(0x0000); // 默认清屏为黑色
+        bsp_backlight_set(true); // 开启背光显示
+    }
+    else
+    {
+        ESP_LOGE(TAG, "初始化 LCD 驱动失败 (%s)", esp_err_to_name(ret));
     }
 
     // 6. 注册按键事件监听器，订阅按键事件并绑定背光联动逻辑
