@@ -8,6 +8,10 @@ static const char *TAG = "pca9557";
 static i2c_master_dev_handle_t s_pca9557_dev_handle = NULL;
 static SemaphoreHandle_t s_pca9557_mutex = NULL;
 
+/* 影子寄存器：在 RAM 中缓存写寄存器的状态，避免 I2C 慢速读取及提高抗干扰能力 */
+static uint8_t s_output_reg_cache = 0xFD; // 默认值 REG_OUTPUT_PORT: LCD_CS=1, PA_EN=0, DVP_PWDN=1
+static uint8_t s_config_reg_cache = 0xF8; // 默认值 REG_CONFIGURATION: IO0,IO1,IO2为输出
+
 /* 芯片内部寄存器地址定义 */
 #define REG_INPUT_PORT      (0x00)
 #define REG_OUTPUT_PORT     (0x01)
@@ -69,13 +73,11 @@ esp_err_t pca9557_init(i2c_master_bus_handle_t bus_handle)
         return err;
     }
 
-    // 初始化寄存器配置：
-    // Reg 1 (Output) = 0xFD (1111 1101) -> LCD_CS = 1, PA_EN = 0, DVP_PWDN = 1
-    // Reg 3 (Config) = 0xF8 (1111 1000) -> IO0, IO1, IO2 设为输出，其它为输入
-    err = s_pca9557_write_reg(REG_OUTPUT_PORT, 0xFD);
+    // 写入默认安全电平与方向配置
+    err = s_pca9557_write_reg(REG_OUTPUT_PORT, s_output_reg_cache);
     if (err == ESP_OK)
     {
-        err = s_pca9557_write_reg(REG_CONFIGURATION, 0xF8);
+        err = s_pca9557_write_reg(REG_CONFIGURATION, s_config_reg_cache);
     }
 
     if (err != ESP_OK)
@@ -84,7 +86,8 @@ esp_err_t pca9557_init(i2c_master_bus_handle_t bus_handle)
         return err;
     }
 
-    ESP_LOGI(TAG, "PCA9557 initialized successfully (Output: 0xFD, Config: 0xF8)");
+    ESP_LOGI(TAG, "PCA9557 initialized successfully (Shadow Output: 0x%02X, Config: 0x%02X)", 
+             s_output_reg_cache, s_config_reg_cache);
     return ESP_OK;
 }
 
@@ -104,19 +107,24 @@ esp_err_t pca9557_set_config(uint8_t pin, bool is_input)
         return ESP_ERR_TIMEOUT;
     }
 
-    uint8_t reg_val = 0;
-    esp_err_t err = s_pca9557_read_reg(REG_CONFIGURATION, &reg_val);
-    if (err == ESP_OK)
+    uint8_t prev_val = s_config_reg_cache;
+    if (is_input)
     {
-        if (is_input)
+        s_config_reg_cache |= (1 << pin);
+    }
+    else
+    {
+        s_config_reg_cache &= ~(1 << pin);
+    }
+
+    esp_err_t err = ESP_OK;
+    if (s_config_reg_cache != prev_val)
+    {
+        err = s_pca9557_write_reg(REG_CONFIGURATION, s_config_reg_cache);
+        if (err != ESP_OK)
         {
-            reg_val |= (1 << pin);
+            s_config_reg_cache = prev_val; // 写入失败时还原影子寄存器
         }
-        else
-        {
-            reg_val &= ~(1 << pin);
-        }
-        err = s_pca9557_write_reg(REG_CONFIGURATION, reg_val);
     }
 
     xSemaphoreGive(s_pca9557_mutex);
@@ -139,19 +147,24 @@ esp_err_t pca9557_set_output_level(uint8_t pin, uint8_t level)
         return ESP_ERR_TIMEOUT;
     }
 
-    uint8_t reg_val = 0;
-    esp_err_t err = s_pca9557_read_reg(REG_OUTPUT_PORT, &reg_val);
-    if (err == ESP_OK)
+    uint8_t prev_val = s_output_reg_cache;
+    if (level)
     {
-        if (level)
+        s_output_reg_cache |= (1 << pin);
+    }
+    else
+    {
+        s_output_reg_cache &= ~(1 << pin);
+    }
+
+    esp_err_t err = ESP_OK;
+    if (s_output_reg_cache != prev_val)
+    {
+        err = s_pca9557_write_reg(REG_OUTPUT_PORT, s_output_reg_cache);
+        if (err != ESP_OK)
         {
-            reg_val |= (1 << pin);
+            s_output_reg_cache = prev_val; // 写入失败时还原影子寄存器
         }
-        else
-        {
-            reg_val &= ~(1 << pin);
-        }
-        err = s_pca9557_write_reg(REG_OUTPUT_PORT, reg_val);
     }
 
     xSemaphoreGive(s_pca9557_mutex);
@@ -164,13 +177,20 @@ esp_err_t pca9557_get_output_level(uint8_t pin, uint8_t *out_level)
     {
         return ESP_ERR_INVALID_ARG;
     }
-    uint8_t reg_val = 0;
-    esp_err_t err = s_pca9557_read_reg(REG_OUTPUT_PORT, &reg_val);
-    if (err == ESP_OK)
+    if (s_pca9557_mutex == NULL)
     {
-        *out_level = (reg_val >> pin) & 0x01;
+        return ESP_ERR_INVALID_STATE;
     }
-    return err;
+
+    if (xSemaphoreTake(s_pca9557_mutex, pdMS_TO_TICKS(100)) != pdTRUE)
+    {
+        return ESP_ERR_TIMEOUT;
+    }
+
+    *out_level = (s_output_reg_cache >> pin) & 0x01;
+
+    xSemaphoreGive(s_pca9557_mutex);
+    return ESP_OK;
 }
 
 esp_err_t pca9557_get_input_level(uint8_t pin, uint8_t *out_level)
@@ -179,11 +199,23 @@ esp_err_t pca9557_get_input_level(uint8_t pin, uint8_t *out_level)
     {
         return ESP_ERR_INVALID_ARG;
     }
+    if (s_pca9557_mutex == NULL)
+    {
+        return ESP_ERR_INVALID_STATE;
+    }
+
+    if (xSemaphoreTake(s_pca9557_mutex, pdMS_TO_TICKS(100)) != pdTRUE)
+    {
+        return ESP_ERR_TIMEOUT;
+    }
+
     uint8_t reg_val = 0;
     esp_err_t err = s_pca9557_read_reg(REG_INPUT_PORT, &reg_val);
     if (err == ESP_OK)
     {
         *out_level = (reg_val >> pin) & 0x01;
     }
+
+    xSemaphoreGive(s_pca9557_mutex);
     return err;
 }
