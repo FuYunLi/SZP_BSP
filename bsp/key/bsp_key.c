@@ -8,6 +8,7 @@
 #include "freertos/task.h"
 #include "iot_button.h"
 #include "driver/gpio.h"
+#include "driver/rtc_io.h"
 #include "esp_log.h"
 #include "esp_event.h"
 
@@ -44,6 +45,12 @@ static void button_event_handler_cb(void *button_handle, void *usr_data)
  */
 void bsp_key_init(void)
 {
+    // 首先反初始化 GPIO0 的 RTC IO 状态，确保其重新路由回普通数字 IO MUX（防止休眠唤醒后按键失效）
+    if (rtc_gpio_is_valid_gpio(0)) {
+        rtc_gpio_hold_dis(0);
+        rtc_gpio_deinit(0);
+    }
+
     if (s_btn_handle != NULL)
     {
         ESP_LOGW(TAG, "BOOT key already initialized");
