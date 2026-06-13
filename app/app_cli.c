@@ -15,6 +15,7 @@
 #include "bsp_key.h"
 #include "nvs_flash.h"
 #include "nvs.h"
+#include "bsp_i2c.h"
 
 static const char *TAG = "app_cli";
 
@@ -173,6 +174,46 @@ static int do_nvs_test_cmd(int argc, char **argv)
     return 0;
 }
 
+/* I2C 总线扫描检测命令的回调函数 */
+static int do_i2c_scan_cmd(int argc, char **argv)
+{
+    i2c_master_bus_handle_t bus_handle = bsp_i2c_get_bus_handle();
+    if (bus_handle == NULL)
+    {
+        printf("Error: I2C1 bus not initialized.\n");
+        return 1;
+    }
+
+    printf("     0  1  2  3  4  5  6  7  8  9  a  b  c  d  e  f\r\n");
+    for (int i = 0; i < 128; i += 16)
+    {
+        printf("%02x: ", i);
+        for (int j = 0; j < 16; j++)
+        {
+            uint8_t address = i + j;
+            // 0x00 - 0x02, 0x78 - 0x7f are reserved addresses in I2C specification
+            if (address < 0x03 || address > 0x77)
+            {
+                printf("   ");
+                continue;
+            }
+            
+            esp_err_t ret = i2c_master_probe(bus_handle, address, 50);
+            if (ret == ESP_OK)
+            {
+                printf("%02x ", address);
+            }
+            else
+            {
+                printf("-- ");
+            }
+        }
+        printf("\r\n");
+    }
+
+    return 0;
+}
+
 /* 注册系统级的通用诊断指令 */
 static void register_system_commands(void)
 {
@@ -207,6 +248,14 @@ static void register_system_commands(void)
         .func = &do_nvs_test_cmd,
     };
     ESP_ERROR_CHECK(esp_console_cmd_register(&nvs_test_cmd));
+
+    const esp_console_cmd_t i2c_scan_cmd = {
+        .command = "i2c_scan",
+        .help = "Scan I2C1 bus for responding slave devices",
+        .hint = NULL,
+        .func = &do_i2c_scan_cmd,
+    };
+    ESP_ERROR_CHECK(esp_console_cmd_register(&i2c_scan_cmd));
 }
 
 /* ================================================================

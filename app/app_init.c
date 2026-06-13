@@ -2,6 +2,7 @@
 #include "app_cli.h"
 #include "bsp_backlight.h"
 #include "bsp_key.h"
+#include "bsp_i2c.h"
 #include "esp_log.h"
 #include "esp_event.h"
 #include "nvs_flash.h"
@@ -61,7 +62,10 @@ void app_init(void)
     // 3. 初始化板载按键硬件并绑定事件发布逻辑
     bsp_key_init();
 
-    // 4. 注册按键事件监听器，订阅按键事件并绑定背光联动逻辑
+    // 4. 初始化板载 I2C1 主总线
+    ESP_ERROR_CHECK(bsp_i2c_init());
+
+    // 5. 注册按键事件监听器，订阅按键事件并绑定背光联动逻辑
     ESP_ERROR_CHECK(esp_event_handler_instance_register(
         BSP_KEY_EVENT_BASE,
         ESP_EVENT_ANY_ID,
@@ -70,6 +74,6 @@ void app_init(void)
         NULL
     ));
 
-    // 5. 启动调试控制台及应用层命令行接口
+    // 6. 启动调试控制台及应用层命令行接口
     ESP_ERROR_CHECK(app_cli_init());
 }
