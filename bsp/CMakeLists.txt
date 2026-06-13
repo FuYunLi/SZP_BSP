@@ -1,3 +1,3 @@
-idf_component_register(SRC_DIRS "key"
-                       INCLUDE_DIRS "key/include"
+idf_component_register(SRC_DIRS "key" "backlight"
+                       INCLUDE_DIRS "key/include" "backlight/include"
                        REQUIRES driver)
