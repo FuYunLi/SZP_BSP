@@ -1,3 +1,5 @@
 dependencies:
   espressif/button: "^3.0.0"
   joltwallet/littlefs: "^1.14.0"
+  espressif/esp_lcd_touch_ft5x06: "^1.0.6"
+

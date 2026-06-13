@@ -22,6 +22,7 @@
 #include "qmi8658.h"
 #include "bsp_power.h"
 #include "bsp_lcd.h"
+#include "bsp_touch.h"
 #include "freertos/FreeRTOS.h"
 #include "freertos/task.h"
 #include <dirent.h>
@@ -671,6 +672,94 @@ static int do_imu_read_cmd(int argc, char **argv)
     return 0;
 }
 
+/* 电容触摸屏实时数据读取测试命令的回调函数 */
+static int do_touch_read_cmd(int argc, char **argv)
+{
+    printf("Touch Panel Read (Press any key to exit):\n");
+    printf("Touch the screen to cycle display colors: RED -> GREEN -> BLUE\n");
+
+    // 清空现有输入缓冲区 (带10ms延迟等待防止输入竞态)
+    fd_set readfds;
+    struct timeval tv;
+    FD_ZERO(&readfds);
+    FD_SET(STDIN_FILENO, &readfds);
+    tv.tv_sec = 0;
+    tv.tv_usec = 10000;
+    while (select(STDIN_FILENO + 1, &readfds, NULL, NULL, &tv) > 0)
+    {
+        getchar();
+        FD_ZERO(&readfds);
+        FD_SET(STDIN_FILENO, &readfds);
+        tv.tv_sec = 0;
+        tv.tv_usec = 10000;
+    }
+
+    // 初始化测试颜色和状态
+    static const uint16_t test_colors[] = {0xF800, 0x07E0, 0x001F}; // 红, 绿, 蓝
+    static const char *color_names[] = {"RED", "GREEN", "BLUE"};
+    int color_idx = 0;
+    bool last_pressed = false;
+
+    // 开始清屏为黑色
+    bsp_lcd_clear(0x0000);
+
+    while (1)
+    {
+        uint16_t x = 0;
+        uint16_t y = 0;
+        uint8_t points_num = 0;
+
+        esp_err_t err = bsp_touch_read(&x, &y, &points_num);
+        if (err == ESP_OK)
+        {
+            bool current_pressed = (points_num > 0);
+            
+            if (current_pressed)
+            {
+                printf("\rPressed: TRUE  | Points: %d | X: %3d | Y: %3d                                   ", points_num, x, y);
+                
+                // 触碰上升沿切换颜色
+                if (!last_pressed)
+                {
+                    bsp_lcd_clear(test_colors[color_idx]);
+                    printf("\n[Touch] Toggled LCD color to %s\n", color_names[color_idx]);
+                    color_idx = (color_idx + 1) % 3;
+                }
+            }
+            else
+            {
+                printf("\rPressed: FALSE | Points: 0 | X: --- | Y: ---                                   ");
+            }
+            fflush(stdout);
+        }
+        else
+        {
+            printf("\rError: Failed to read touch data (%s)                   ", esp_err_to_name(err));
+            fflush(stdout);
+        }
+
+        // 以 50ms 为周期轮询输入，如果是合法字符（非回车）则安全退出
+        FD_ZERO(&readfds);
+        FD_SET(STDIN_FILENO, &readfds);
+        tv.tv_sec = 0;
+        tv.tv_usec = 50000;
+        if (select(STDIN_FILENO + 1, &readfds, NULL, NULL, &tv) > 0)
+        {
+            int c = getchar();
+            if (c != '\n' && c != '\r' && c != -1)
+            {
+                break;
+            }
+        }
+    }
+
+    printf("\nExit Touch reader.\n");
+    // 测试结束清屏为黑色
+    bsp_lcd_clear(0x0000);
+    return 0;
+}
+
+
 /* 注册系统级的通用诊断指令 */
 static void register_system_commands(void)
 {
@@ -793,6 +882,14 @@ static void register_system_commands(void)
         .func = &do_lcd_clear_cmd,
     };
     ESP_ERROR_CHECK(esp_console_cmd_register(&lcd_clear_cmd));
+
+    const esp_console_cmd_t touch_read_cmd = {
+        .command = "touch_read",
+        .help = "Read touchscreen data and coordinates in real-time",
+        .hint = NULL,
+        .func = &do_touch_read_cmd,
+    };
+    ESP_ERROR_CHECK(esp_console_cmd_register(&touch_read_cmd));
 }
 
 /* ================================================================
