@@ -21,6 +21,7 @@
 #include "bsp_sdcard.h"
 #include "qmi8658.h"
 #include "bsp_power.h"
+#include "bsp_lcd.h"
 #include "freertos/FreeRTOS.h"
 #include "freertos/task.h"
 #include <dirent.h>
@@ -127,6 +128,68 @@ static int do_goto_sleep_cmd(int argc, char **argv)
         printf("Invalid sleep mode. Usage: goto_sleep <light|deep>\n");
         return 1;
     }
+}
+
+/* LCD 清屏诊断命令的回调函数 */
+static int do_lcd_clear_cmd(int argc, char **argv)
+{
+    if (argc < 2)
+    {
+        printf("用法: lcd_clear <color_name | hex_val>\n");
+        printf("可选颜色名称: red, green, blue, black, white, yellow\n");
+        printf("十六进制格式: 0xF800 (RGB565)\n");
+        return 1;
+    }
+
+    uint16_t color = 0x0000;
+    const char *color_arg = argv[1];
+
+    if (strcmp(color_arg, "red") == 0)
+    {
+        color = 0xF800;
+    }
+    else if (strcmp(color_arg, "green") == 0)
+    {
+        color = 0x07E0;
+    }
+    else if (strcmp(color_arg, "blue") == 0)
+    {
+        color = 0x001F;
+    }
+    else if (strcmp(color_arg, "black") == 0)
+    {
+        color = 0x0000;
+    }
+    else if (strcmp(color_arg, "white") == 0)
+    {
+        color = 0xFFFF;
+    }
+    else if (strcmp(color_arg, "yellow") == 0)
+    {
+        color = 0xFFE0;
+    }
+    else
+    {
+        char *endptr;
+        long val = strtol(color_arg, &endptr, 0);
+        if (endptr == color_arg || *endptr != '\0')
+        {
+            printf("无效的颜色输入: %s\n", color_arg);
+            return 1;
+        }
+        color = (uint16_t)val;
+    }
+
+    printf("正在清屏为颜色值: 0x%04X...\n", color);
+    esp_err_t err = bsp_lcd_clear(color);
+    if (err != ESP_OK)
+    {
+        printf("清屏失败: %s\n", esp_err_to_name(err));
+        return 1;
+    }
+
+    printf("清屏成功。\n");
+    return 0;
 }
 
 /* NVS 读写测试命令的回调函数 */
@@ -722,6 +785,14 @@ static void register_system_commands(void)
         .func = &do_goto_sleep_cmd,
     };
     ESP_ERROR_CHECK(esp_console_cmd_register(&goto_sleep_cmd));
+
+    const esp_console_cmd_t lcd_clear_cmd = {
+        .command = "lcd_clear",
+        .help = "Clear screen with a color (name or hex RGB565 value)",
+        .hint = NULL,
+        .func = &do_lcd_clear_cmd,
+    };
+    ESP_ERROR_CHECK(esp_console_cmd_register(&lcd_clear_cmd));
 }
 
 /* ================================================================
