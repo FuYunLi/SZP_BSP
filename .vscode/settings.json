@@ -4,7 +4,7 @@
   "idf.openOcdConfigs": [
     "board/esp32s3-builtin.cfg"
   ],
-  "idf.port": "detect",
+  "idf.port": "/dev/ttyACM0",
   "idf.currentSetup": "/home/liyun/esp/v5.5.1/esp-idf",
   "idf.customExtraVars": {
     "IDF_TARGET": "esp32s3"
@@ -12,7 +12,8 @@
   "clangd.path": "/home/liyun/.espressif/tools/esp-clang/esp-19.1.2_20250312/esp-clang/bin/clangd",
   "clangd.arguments": [
     "--background-index",
-    "--query-driver=**",
-    "--compile-commands-dir=/home/liyun/esp/projects/WORD_CARD/V1/word_card/build"
-  ]
+    "--query-driver=/home/liyun/.espressif/tools/xtensa-esp-elf/**/bin/xtensa-esp32s3-elf-*gcc*",
+    "--compile-commands-dir=/home/liyun/esp/projects/LCSZP/SZP_BSP/V1/build"
+  ],
+  "idf.flashType": "UART"
 }

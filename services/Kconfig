@@ -6,4 +6,10 @@ menu "Services Configuration"
         help
             Maximum number of reconnect attempts before giving up.
 
+    config CONSOLE_PROMPT_STRING
+        string "Console command line prompt"
+        default "SZP> "
+        help
+            The prompt string printed by the console before reading command.
+
 endmenu

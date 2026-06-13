@@ -1,4 +1,9 @@
 CompileFlags:
-    Remove: [-f*, -m*]
-    CompilationDatabase: build
-
+  CompilationDatabase: "."
+  Remove:
+    - -m*
+    - -fno-tree-switch-conversion
+    - -fstrict-volatile-bitfields
+    - -mtext-section-literals
+    - -fno-shrink-wrap
+    - -fno-jump-tables
