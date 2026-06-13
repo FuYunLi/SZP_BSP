@@ -4,6 +4,7 @@
 #include "bsp_key.h"
 #include "bsp_i2c.h"
 #include "bsp_littlefs.h"
+#include "bsp_sdcard.h"
 #include "pca9557.h"
 #include "esp_log.h"
 #include "esp_event.h"
@@ -60,6 +61,14 @@ void app_init(void)
 
     // 1.5 挂载片上 Flash 局部文件系统 (LittleFS)
     ESP_ERROR_CHECK(bsp_littlefs_mount());
+
+    // 1.6 挂载外部 MicroSD 卡 (SDIO 1-bit)
+    // 注意：SD卡为可拔插介质，初始化失败时不能挂死系统，只记录Warning日志
+    ret = bsp_sdcard_mount();
+    if (ret != ESP_OK)
+    {
+        ESP_LOGW(TAG, "MicroSD card mount failed or not inserted (%s)", esp_err_to_name(ret));
+    }
 
     // 2. 初始化板载背光硬件
     ESP_ERROR_CHECK(bsp_backlight_init());
