@@ -13,6 +13,8 @@
 #include "esp_log.h"
 #include "driver/gpio.h"
 #include "bsp_key.h"
+#include "nvs_flash.h"
+#include "nvs.h"
 
 static const char *TAG = "app_cli";
 
@@ -58,6 +60,119 @@ static int do_key_cmd(int argc, char **argv)
     return 0;
 }
 
+/* NVS 读写测试命令的回调函数 */
+static int do_nvs_test_cmd(int argc, char **argv)
+{
+    if (argc < 2)
+    {
+        printf("Usage: nvs_test <key> [value]\n");
+        return 1;
+    }
+
+    const char *key = argv[1];
+    nvs_handle_t my_handle;
+    esp_err_t err = nvs_open("storage", NVS_READWRITE, &my_handle);
+    if (err != ESP_OK)
+    {
+        printf("Error opening NVS handle: %s\n", esp_err_to_name(err));
+        return 1;
+    }
+
+    if (argc >= 3)
+    {
+        // 写入模式
+        const char *val_str = argv[2];
+        char *endptr;
+        long val_int = strtol(val_str, &endptr, 10);
+        
+        if (*endptr == '\0')
+        {
+            // 纯数字，写入整型 i32
+            err = nvs_set_i32(my_handle, key, (int32_t)val_int);
+            if (err == ESP_OK)
+            {
+                err = nvs_commit(my_handle);
+            }
+            if (err == ESP_OK)
+            {
+                printf("NVS Write Success: Integer %s = %ld\n", key, val_int);
+            }
+            else
+            {
+                printf("Failed to write integer: %s\n", esp_err_to_name(err));
+            }
+        }
+        else
+        {
+            // 字符串，写入 str
+            err = nvs_set_str(my_handle, key, val_str);
+            if (err == ESP_OK)
+            {
+                err = nvs_commit(my_handle);
+            }
+            if (err == ESP_OK)
+            {
+                printf("NVS Write Success: String %s = \"%s\"\n", key, val_str);
+            }
+            else
+            {
+                printf("Failed to write string: %s\n", esp_err_to_name(err));
+            }
+        }
+    }
+    else
+    {
+        // 读取模式
+        int32_t val_int = 0;
+        err = nvs_get_i32(my_handle, key, &val_int);
+        if (err == ESP_OK)
+        {
+            printf("Read integer: %s = %ld\n", key, (long)val_int);
+        }
+        else if (err == ESP_ERR_NVS_TYPE_MISMATCH || err == ESP_ERR_NVS_NOT_FOUND)
+        {
+            size_t required_size = 0;
+            err = nvs_get_str(my_handle, key, NULL, &required_size);
+            if (err == ESP_OK)
+            {
+                char *buf = malloc(required_size);
+                if (buf != NULL)
+                {
+                    err = nvs_get_str(my_handle, key, buf, &required_size);
+                    if (err == ESP_OK)
+                    {
+                        printf("Read string: %s = \"%s\"\n", key, buf);
+                    }
+                    else
+                    {
+                        printf("Failed to read string: %s\n", esp_err_to_name(err));
+                    }
+                    free(buf);
+                }
+                else
+                {
+                    printf("Memory allocation failed\n");
+                }
+            }
+            else if (err == ESP_ERR_NVS_NOT_FOUND)
+            {
+                printf("Key '%s' not found in NVS namespace 'storage'\n", key);
+            }
+            else
+            {
+                printf("Failed to read string size: %s\n", esp_err_to_name(err));
+            }
+        }
+        else
+        {
+            printf("Failed to read key '%s': %s\n", key, esp_err_to_name(err));
+        }
+    }
+
+    nvs_close(my_handle);
+    return 0;
+}
+
 /* 注册系统级的通用诊断指令 */
 static void register_system_commands(void)
 {
@@ -84,6 +199,14 @@ static void register_system_commands(void)
         .func = &do_key_cmd,
     };
     ESP_ERROR_CHECK(esp_console_cmd_register(&key_cmd));
+
+    const esp_console_cmd_t nvs_test_cmd = {
+        .command = "nvs_test",
+        .help = "Write or read NVS key-value pairs: nvs_test <key> [value]",
+        .hint = NULL,
+        .func = &do_nvs_test_cmd,
+    };
+    ESP_ERROR_CHECK(esp_console_cmd_register(&nvs_test_cmd));
 }
 
 /* ================================================================
