@@ -5,6 +5,7 @@
 #include "bsp_i2c.h"
 #include "bsp_littlefs.h"
 #include "bsp_sdcard.h"
+#include "qmi8658.h"
 #include "pca9557.h"
 #include "esp_log.h"
 #include "esp_event.h"
@@ -81,6 +82,13 @@ void app_init(void)
 
     // 5. 初始化板载 IO 扩展芯片 PCA9557
     ESP_ERROR_CHECK(pca9557_init(bsp_i2c_get_bus_handle()));
+
+    // 5.5 初始化板载 6 轴姿态传感器 QMI8658A
+    ret = qmi8658_init(bsp_i2c_get_bus_handle());
+    if (ret != ESP_OK)
+    {
+        ESP_LOGE(TAG, "Failed to initialize QMI8658A IMU (%s)", esp_err_to_name(ret));
+    }
 
     // 6. 注册按键事件监听器，订阅按键事件并绑定背光联动逻辑
     ESP_ERROR_CHECK(esp_event_handler_instance_register(

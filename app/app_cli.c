@@ -19,7 +19,11 @@
 #include "pca9557.h"
 #include "bsp_littlefs.h"
 #include "bsp_sdcard.h"
+#include "qmi8658.h"
 #include <dirent.h>
+#include <math.h>
+#include <sys/select.h>
+#include <unistd.h>
 
 static const char *TAG = "app_cli";
 
@@ -483,6 +487,67 @@ static int do_sd_read_cmd(int argc, char **argv)
     return 0;
 }
 
+/* 6 轴姿态传感器实时读取测试命令的回调函数 */
+static int do_imu_read_cmd(int argc, char **argv)
+{
+    printf("IMU Data (Press any key to exit):\n");
+
+    // 清空现有输入缓冲区
+    fd_set readfds;
+    struct timeval tv;
+    FD_ZERO(&readfds);
+    FD_SET(STDIN_FILENO, &readfds);
+    tv.tv_sec = 0;
+    tv.tv_usec = 0;
+    while (select(STDIN_FILENO + 1, &readfds, NULL, NULL, &tv) > 0)
+    {
+        getchar();
+        FD_ZERO(&readfds);
+        FD_SET(STDIN_FILENO, &readfds);
+    }
+
+    while (1)
+    {
+        float acc[3];
+        float gyro[3];
+        float temp = 0.0f;
+
+        esp_err_t err = qmi8658_read_parsed(acc, gyro);
+        if (err == ESP_OK)
+        {
+            qmi8658_read_temp(&temp);
+
+            // 通过重力分量计算 Pitch 与 Roll 倾角
+            float pitch = atan2f(acc[0], sqrtf(acc[1] * acc[1] + acc[2] * acc[2])) * 57.29578f;
+            float roll = atan2f(acc[1], acc[2]) * 57.29578f;
+
+            // 实现在行首动态覆盖打印
+            printf("\rAcc: X=%6.3fg, Y=%6.3fg, Z=%6.3fg | Gyro: X=%6.1fdps, Y=%6.1fdps, Z=%6.1fdps | Pitch: %6.1f deg, Roll: %6.1f deg | Temp: %4.1f C",
+                   acc[0], acc[1], acc[2], gyro[0], gyro[1], gyro[2], pitch, roll, temp);
+            fflush(stdout);
+        }
+        else
+        {
+            printf("\rError: Failed to read IMU data (%s)                   ", esp_err_to_name(err));
+            fflush(stdout);
+        }
+
+        // 以 100ms 为周期轮询输入，如有输入则安全退出
+        FD_ZERO(&readfds);
+        FD_SET(STDIN_FILENO, &readfds);
+        tv.tv_sec = 0;
+        tv.tv_usec = 100000;
+        if (select(STDIN_FILENO + 1, &readfds, NULL, NULL, &tv) > 0)
+        {
+            getchar(); // 吃掉该按键，避免打印多余的回车或控制台报错
+            break;
+        }
+    }
+
+    printf("\nExit IMU reader.\n");
+    return 0;
+}
+
 /* 注册系统级的通用诊断指令 */
 static void register_system_commands(void)
 {
@@ -581,6 +646,14 @@ static void register_system_commands(void)
         .func = &do_sd_read_cmd,
     };
     ESP_ERROR_CHECK(esp_console_cmd_register(&sd_read_cmd));
+
+    const esp_console_cmd_t imu_read_cmd = {
+        .command = "imu_read",
+        .help = "Read IMU sensors and display Pitch/Roll orientation in real-time",
+        .hint = NULL,
+        .func = &do_imu_read_cmd,
+    };
+    ESP_ERROR_CHECK(esp_console_cmd_register(&imu_read_cmd));
 }
 
 /* ================================================================
