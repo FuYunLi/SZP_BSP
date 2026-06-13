@@ -1,4 +1,4 @@
-# Word Card 项目 ESP-IDF 工程开发规范
+# SZP_BSP项目 ESP-IDF 工程开发规范
 
 > 版本：1.1.0  
 > 更新日期：2026-06-11  
@@ -36,14 +36,18 @@ MyProject/
 │   │   │   └── wifi_service.h
 │   │   └── wifi_service.c
 │   └── mqtt_service/
-├── bsp/                      # 板级支持包与驱动组件（平级组件）
-│   ├── CMakeLists.txt        # 聚合管理底层驱动（如LED、Key、Sensor）
+├── bsp/                      # 板级支持包与硬件集成组件（平级组件）
+│   ├── CMakeLists.txt        # 聚合管理板级抽象逻辑与初始化接口
 │   ├── Kconfig.projbuild     # 板级引脚与硬件配置（全局可见）
-│   ├── led/
-│   │   ├── include/
-│   │   │   └── bsp_led.h     # 统一抽象接口，隐藏GPIO细节
-│   │   └── bsp_led.c
-│   └── key/
+│   ├── backlight/
+│   ├── key/
+│   └── i2c/
+├── components/               # 自研可复用芯片驱动与基础功能组件（ESP-IDF默认路径，自动注册）
+│   └── pca9557/              # 纯 PCA9557 芯片驱动组件（与开发板引脚解耦，仅依赖 I2C 句柄）
+│       ├── CMakeLists.txt
+│       ├── pca9557.c
+│       └── include/
+│           └── pca9557.h
 ├── managed_components/       # 乐鑫官方或第三方托管组件（自动生成，勿手动改）
 └── build/                    # 编译输出产物（不纳入Git）
 ```
@@ -52,19 +56,20 @@ MyProject/
 * **入口层 (main)**：只包含系统启动引导代码（如 `app_main`），负责全局基础环境的初始化（如 NVS、Flash 等），并调用 `app_init()` 启动应用层核心逻辑。
 * **应用层 (app)**：业务逻辑的核心位置，实现各种软件交互逻辑（如 UI、背词管理、拼写判定），通过调用 `services/` 或 `bsp/` 提供的接口，实现应用逻辑与底层硬件及通信协议的解耦。
 * **服务层 (services)**：包含系统中间件与通信服务（如 Wi-Fi 连接、MQTT 通信、OTA 固件升级），通过 CMake 聚合管理这些子服务。
-* **板级支持层 (bsp)**：负责封装底层的硬件驱动与板级抽象（如 LED、按键、传感器驱动）。内部的物理引脚与底层硬件配置通过 `Kconfig.projbuild` 定义，并通过统一抽象的接口（如 `bsp_led.h`）对上层隐藏 GPIO 细节。
-* **第三方管理组件 (managed_components)**：通过 `idf_component.yml` 自动下载的成熟官方及社区开源驱动包，由包管理器管理，不做二次修改。
+* **板级支持层 (bsp)**：负责封装板级的硬件引脚映射、通信初始化与高层接口（如 `bsp_key`、`bsp_backlight`、`bsp_i2c`）。它持有开发板引脚图纸的“硬编码”信息，通过整合底层的纯芯片驱动（来自 `components/`）实现具体的板级控制，并对上层隐藏 GPIO 细节。
+* **自研芯片与公共组件层 (components)**：专门存放**与特定物理开发板完全解耦**的纯芯片驱动（如 `pca9557`、`gt911`、`es8311`）或者算法公共库。驱动代码仅依赖 ESP-IDF 标准驱动接口（如传入 I2C 或者是 SPI 句柄），内部禁止包含任何特定的引脚宏或硬编码硬件配置，可以直接复制移植到任何其他 ESP-IDF 工程中复用。
+* **第三方管理组件 (managed_components)**：通过 `idf_component.yml` 自动下载的成熟官方及社区开源驱动包，由关理器管理，不做二次修改。
 
 ### 1.2 编译目录注册规范
 为了支持根目录的 `app`、`services` 以及 `bsp` 被 ESP-IDF 正确编译，必须在项目根目录下的 `CMakeLists.txt` 中显式指定 `EXTRA_COMPONENT_DIRS` 注册这三个自定义目录：
 ```cmake
 cmake_minimum_required(VERSION 3.16)
 
-# 将自定义顶层文件夹注册为 ESP-IDF 组件搜索路径
+# 将自定义顶层文件夹注册为 ESP-IDF 组件搜索路径（注意：根目录下的 components/ 是默认搜索路径，无需在此处注册）
 set(EXTRA_COMPONENT_DIRS "app" "services" "bsp")
 
 include($ENV{IDF_PATH}/tools/cmake/project.cmake)
-project(word_card)
+project(SZP_BSP)
 ```
 
 ### 1.3 驱动与外部组件引入原则

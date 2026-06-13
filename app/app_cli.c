@@ -16,6 +16,7 @@
 #include "nvs_flash.h"
 #include "nvs.h"
 #include "bsp_i2c.h"
+#include "pca9557.h"
 
 static const char *TAG = "app_cli";
 
@@ -214,6 +215,90 @@ static int do_i2c_scan_cmd(int argc, char **argv)
     return 0;
 }
 
+/* PCA9557 设置引脚输出电平回调函数 */
+static int do_pca9557_set_cmd(int argc, char **argv)
+{
+    if (argc < 3)
+    {
+        printf("Usage: pca9557_set <pin> <0|1>\n");
+        return 1;
+    }
+
+    int pin = atoi(argv[1]);
+    int level = atoi(argv[2]);
+
+    if (pin < 0 || pin > 7)
+    {
+        printf("Error: Pin must be 0-7.\n");
+        return 1;
+    }
+
+    if (level != 0 && level != 1)
+    {
+        printf("Error: Level must be 0 or 1.\n");
+        return 1;
+    }
+
+    // 先设置为输出模式
+    esp_err_t err = pca9557_set_config(pin, false);
+    if (err != ESP_OK)
+    {
+        printf("Error: Failed to configure pin as output: %s\n", esp_err_to_name(err));
+        return 1;
+    }
+
+    // 设置输出电平
+    err = pca9557_set_output_level(pin, level);
+    if (err != ESP_OK)
+    {
+        printf("Error: Failed to set pin output level: %s\n", esp_err_to_name(err));
+        return 1;
+    }
+
+    printf("PCA9557 Pin %d output level set to %d.\n", pin, level);
+    return 0;
+}
+
+/* PCA9557 获取引脚状态回调函数 */
+static int do_pca9557_get_cmd(int argc, char **argv)
+{
+    if (argc < 2)
+    {
+        printf("Usage: pca9557_get <pin>\n");
+        return 1;
+    }
+
+    int pin = atoi(argv[1]);
+    if (pin < 0 || pin > 7)
+    {
+        printf("Error: Pin must be 0-7.\n");
+        return 1;
+    }
+
+    uint8_t input_level = 0;
+    uint8_t output_level = 0;
+
+    esp_err_t err = pca9557_get_input_level(pin, &input_level);
+    if (err != ESP_OK)
+    {
+        printf("Error: Failed to read input level: %s\n", esp_err_to_name(err));
+        return 1;
+    }
+
+    err = pca9557_get_output_level(pin, &output_level);
+    if (err != ESP_OK)
+    {
+        printf("Error: Failed to read output level: %s\n", esp_err_to_name(err));
+        return 1;
+    }
+
+    printf("PCA9557 Pin %d status:\n", pin);
+    printf("  Input Level  : %d\n", input_level);
+    printf("  Output Level : %d (defined if configured as output)\n", output_level);
+
+    return 0;
+}
+
 /* 注册系统级的通用诊断指令 */
 static void register_system_commands(void)
 {
@@ -256,6 +341,22 @@ static void register_system_commands(void)
         .func = &do_i2c_scan_cmd,
     };
     ESP_ERROR_CHECK(esp_console_cmd_register(&i2c_scan_cmd));
+
+    const esp_console_cmd_t pca9557_set_cmd = {
+        .command = "pca9557_set",
+        .help = "Set PCA9557 pin output level: pca9557_set <pin> <0|1>",
+        .hint = NULL,
+        .func = &do_pca9557_set_cmd,
+    };
+    ESP_ERROR_CHECK(esp_console_cmd_register(&pca9557_set_cmd));
+
+    const esp_console_cmd_t pca9557_get_cmd = {
+        .command = "pca9557_get",
+        .help = "Get PCA9557 pin input and output levels: pca9557_get <pin>",
+        .hint = NULL,
+        .func = &do_pca9557_get_cmd,
+    };
+    ESP_ERROR_CHECK(esp_console_cmd_register(&pca9557_get_cmd));
 }
 
 /* ================================================================
