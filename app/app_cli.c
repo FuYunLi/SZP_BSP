@@ -18,6 +18,8 @@
 #include "bsp_i2c.h"
 #include "pca9557.h"
 #include "bsp_littlefs.h"
+#include "bsp_sdcard.h"
+#include <dirent.h>
 
 static const char *TAG = "app_cli";
 
@@ -378,6 +380,109 @@ static int do_fs_read_cmd(int argc, char **argv)
     return 0;
 }
 
+/* MicroSD 卡目录文件列出测试命令的回调函数 */
+static int do_sd_ls_cmd(int argc, char **argv)
+{
+    if (!bsp_sdcard_is_mounted())
+    {
+        printf("Error: SD card is not mounted.\n");
+        return 1;
+    }
+
+    DIR *dir = opendir("/sdcard");
+    if (dir == NULL)
+    {
+        printf("Error: Failed to open directory /sdcard\n");
+        return 1;
+    }
+
+    printf("Files in /sdcard:\n");
+    struct dirent *de;
+    while ((de = readdir(dir)) != NULL)
+    {
+        printf("  %s\n", de->d_name);
+    }
+    closedir(dir);
+    return 0;
+}
+
+/* MicroSD 卡文件写入测试命令的回调函数 */
+static int do_sd_write_cmd(int argc, char **argv)
+{
+    if (!bsp_sdcard_is_mounted())
+    {
+        printf("Error: SD card is not mounted.\n");
+        return 1;
+    }
+
+    if (argc < 3)
+    {
+        printf("Usage: sd_write <file> <data>\n");
+        return 1;
+    }
+
+    const char *file_name = argv[1];
+    const char *data = argv[2];
+    char path[128];
+    snprintf(path, sizeof(path), "/sdcard/%s", file_name);
+
+    FILE *f = fopen(path, "w");
+    if (f == NULL)
+    {
+        printf("Error: Failed to open file %s for writing\n", path);
+        return 1;
+    }
+
+    size_t written = fwrite(data, 1, strlen(data), f);
+    fclose(f);
+
+    if (written < strlen(data))
+    {
+        printf("Error: Only wrote %zu of %zu bytes to %s\n", written, strlen(data), path);
+        return 1;
+    }
+
+    printf("Successfully wrote %zu bytes to file %s\n", written, path);
+    return 0;
+}
+
+/* MicroSD 卡文件读取测试命令的回调函数 */
+static int do_sd_read_cmd(int argc, char **argv)
+{
+    if (!bsp_sdcard_is_mounted())
+    {
+        printf("Error: SD card is not mounted.\n");
+        return 1;
+    }
+
+    if (argc < 2)
+    {
+        printf("Usage: sd_read <file>\n");
+        return 1;
+    }
+
+    const char *file_name = argv[1];
+    char path[128];
+    snprintf(path, sizeof(path), "/sdcard/%s", file_name);
+
+    FILE *f = fopen(path, "r");
+    if (f == NULL)
+    {
+        printf("Error: Failed to open file %s for reading\n", path);
+        return 1;
+    }
+
+    char buf[256];
+    printf("Content of file %s:\n", path);
+    while (fgets(buf, sizeof(buf), f) != NULL)
+    {
+        printf("%s", buf);
+    }
+    printf("\n");
+    fclose(f);
+    return 0;
+}
+
 /* 注册系统级的通用诊断指令 */
 static void register_system_commands(void)
 {
@@ -452,6 +557,30 @@ static void register_system_commands(void)
         .func = &do_fs_read_cmd,
     };
     ESP_ERROR_CHECK(esp_console_cmd_register(&fs_read_cmd));
+
+    const esp_console_cmd_t sd_ls_cmd = {
+        .command = "sd_ls",
+        .help = "List files in SD card directory",
+        .hint = NULL,
+        .func = &do_sd_ls_cmd,
+    };
+    ESP_ERROR_CHECK(esp_console_cmd_register(&sd_ls_cmd));
+
+    const esp_console_cmd_t sd_write_cmd = {
+        .command = "sd_write",
+        .help = "Write string to SD card: sd_write <file> <data>",
+        .hint = NULL,
+        .func = &do_sd_write_cmd,
+    };
+    ESP_ERROR_CHECK(esp_console_cmd_register(&sd_write_cmd));
+
+    const esp_console_cmd_t sd_read_cmd = {
+        .command = "sd_read",
+        .help = "Read file from SD card: sd_read <file>",
+        .hint = NULL,
+        .func = &do_sd_read_cmd,
+    };
+    ESP_ERROR_CHECK(esp_console_cmd_register(&sd_read_cmd));
 }
 
 /* ================================================================
