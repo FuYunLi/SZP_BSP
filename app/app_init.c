@@ -6,6 +6,7 @@
 #include "app_init.h"
 #include "app_cli.h"
 #include "bsp_backlight.h"
+#include "bsp_key.h"
 
 /* ================================================================
  * 公开接口实现
@@ -18,6 +19,9 @@ void app_init(void)
 {
     // 初始化板载背光硬件
     ESP_ERROR_CHECK(bsp_backlight_init());
+
+    // 初始化板载按键硬件
+    bsp_key_init();
 
     // 启动调试控制台及应用层命令行接口
     ESP_ERROR_CHECK(app_cli_init());
