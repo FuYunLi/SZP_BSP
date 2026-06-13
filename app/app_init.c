@@ -3,6 +3,7 @@
 #include "bsp_backlight.h"
 #include "bsp_key.h"
 #include "bsp_i2c.h"
+#include "pca9557.h"
 #include "esp_log.h"
 #include "esp_event.h"
 #include "nvs_flash.h"
@@ -65,7 +66,10 @@ void app_init(void)
     // 4. 初始化板载 I2C1 主总线
     ESP_ERROR_CHECK(bsp_i2c_init());
 
-    // 5. 注册按键事件监听器，订阅按键事件并绑定背光联动逻辑
+    // 5. 初始化板载 IO 扩展芯片 PCA9557
+    ESP_ERROR_CHECK(pca9557_init(bsp_i2c_get_bus_handle()));
+
+    // 6. 注册按键事件监听器，订阅按键事件并绑定背光联动逻辑
     ESP_ERROR_CHECK(esp_event_handler_instance_register(
         BSP_KEY_EVENT_BASE,
         ESP_EVENT_ANY_ID,
@@ -74,6 +78,6 @@ void app_init(void)
         NULL
     ));
 
-    // 6. 启动调试控制台及应用层命令行接口
+    // 7. 启动调试控制台及应用层命令行接口
     ESP_ERROR_CHECK(app_cli_init());
 }
