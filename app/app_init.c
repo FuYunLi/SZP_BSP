@@ -3,6 +3,7 @@
 #include "bsp_backlight.h"
 #include "bsp_key.h"
 #include "bsp_i2c.h"
+#include "bsp_littlefs.h"
 #include "pca9557.h"
 #include "esp_log.h"
 #include "esp_event.h"
@@ -56,6 +57,9 @@ void app_init(void)
     {
         ESP_LOGE(TAG, "Failed to create default event loop: %s", esp_err_to_name(err));
     }
+
+    // 1.5 挂载片上 Flash 局部文件系统 (LittleFS)
+    ESP_ERROR_CHECK(bsp_littlefs_mount());
 
     // 2. 初始化板载背光硬件
     ESP_ERROR_CHECK(bsp_backlight_init());
