@@ -4,6 +4,7 @@
 #include "bsp_key.h"
 #include "esp_log.h"
 #include "esp_event.h"
+#include "nvs_flash.h"
 
 static const char *TAG = "app_init";
 
@@ -37,6 +38,16 @@ static void app_key_event_handler(void *handler_args, esp_event_base_t base, int
  */
 void app_init(void)
 {
+    // 0. 初始化板载非易失性存储服务 (NVS)
+    esp_err_t ret = nvs_flash_init();
+    if (ret == ESP_ERR_NVS_NO_FREE_PAGES || ret == ESP_ERR_NVS_NEW_VERSION_FOUND)
+    {
+        ESP_LOGW(TAG, "NVS partition needs to be erased and re-initialized");
+        ESP_ERROR_CHECK(nvs_flash_erase());
+        ret = nvs_flash_init();
+    }
+    ESP_ERROR_CHECK(ret);
+
     // 1. 初始化系统默认事件总线
     esp_err_t err = esp_event_loop_create_default();
     if (err != ESP_OK && err != ESP_ERR_INVALID_STATE)
