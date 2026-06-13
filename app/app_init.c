@@ -3,21 +3,29 @@
 #include "bsp_backlight.h"
 #include "bsp_key.h"
 #include "esp_log.h"
+#include "esp_event.h"
 
 static const char *TAG = "app_init";
 
-/* 按键单击事件回调：开启背光 */
-static void app_key_single_click_handler(void *arg, void *usr_data)
+/* 统一的按键事件总线监听器，处理单击和双击事件以控制背光 */
+static void app_key_event_handler(void *handler_args, esp_event_base_t base, int32_t id, void *data)
 {
-    ESP_LOGI(TAG, "BOOT Key Single Click -> Turn Backlight ON (Decoupled)");
-    bsp_backlight_set(true);
-}
-
-/* 按键双击事件回调：关闭背光 */
-static void app_key_double_click_handler(void *arg, void *usr_data)
-{
-    ESP_LOGI(TAG, "BOOT Key Double Click -> Turn Backlight OFF (Decoupled)");
-    bsp_backlight_set(false);
+    if (base == BSP_KEY_EVENT_BASE)
+    {
+        switch (id)
+        {
+            case BSP_KEY_EVENT_SINGLE_CLICK:
+                ESP_LOGI(TAG, "BOOT Key Single Click Event -> Turn Backlight ON (Publish-Subscribe)");
+                bsp_backlight_set(true);
+                break;
+            case BSP_KEY_EVENT_DOUBLE_CLICK:
+                ESP_LOGI(TAG, "BOOT Key Double Click Event -> Turn Backlight OFF (Publish-Subscribe)");
+                bsp_backlight_set(false);
+                break;
+            default:
+                break;
+        }
+    }
 }
 
 /* ================================================================
@@ -29,16 +37,28 @@ static void app_key_double_click_handler(void *arg, void *usr_data)
  */
 void app_init(void)
 {
-    // 初始化板载背光硬件
+    // 1. 初始化系统默认事件总线
+    esp_err_t err = esp_event_loop_create_default();
+    if (err != ESP_OK && err != ESP_ERR_INVALID_STATE)
+    {
+        ESP_LOGE(TAG, "Failed to create default event loop: %s", esp_err_to_name(err));
+    }
+
+    // 2. 初始化板载背光硬件
     ESP_ERROR_CHECK(bsp_backlight_init());
 
-    // 初始化板载按键硬件
+    // 3. 初始化板载按键硬件并绑定事件发布逻辑
     bsp_key_init();
 
-    // 注册按键事件回调，绑定背光控制逻辑（解耦设计实现）
-    ESP_ERROR_CHECK(bsp_key_register_callback(BSP_KEY_SINGLE_CLICK, app_key_single_click_handler, NULL));
-    ESP_ERROR_CHECK(bsp_key_register_callback(BSP_KEY_DOUBLE_CLICK, app_key_double_click_handler, NULL));
+    // 4. 注册按键事件监听器，订阅按键事件并绑定背光联动逻辑
+    ESP_ERROR_CHECK(esp_event_handler_instance_register(
+        BSP_KEY_EVENT_BASE,
+        ESP_EVENT_ANY_ID,
+        app_key_event_handler,
+        NULL,
+        NULL
+    ));
 
-    // 启动调试控制台及应用层命令行接口
+    // 5. 启动调试控制台及应用层命令行接口
     ESP_ERROR_CHECK(app_cli_init());
 }
