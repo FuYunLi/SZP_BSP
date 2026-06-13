@@ -20,6 +20,9 @@
 #include "bsp_littlefs.h"
 #include "bsp_sdcard.h"
 #include "qmi8658.h"
+#include "bsp_power.h"
+#include "freertos/FreeRTOS.h"
+#include "freertos/task.h"
 #include <dirent.h>
 #include <math.h>
 #include <sys/select.h>
@@ -67,6 +70,63 @@ static int do_key_cmd(int argc, char **argv)
     bool pressed = bsp_key_is_pressed();
     printf("BOOT Key status: %s (Level: %d)\n", pressed ? "PRESSED" : "RELEASED", gpio_get_level(0));
     return 0;
+}
+
+/* 进入睡眠模式诊断命令的回调函数 */
+static int do_goto_sleep_cmd(int argc, char **argv)
+{
+    if (argc < 2)
+    {
+        printf("Usage: goto_sleep <light|deep>\n");
+        return 1;
+    }
+    
+    const char *mode_str = argv[1];
+    if (strcmp(mode_str, "light") == 0)
+    {
+        printf("Preparing to enter Light-sleep...\n");
+        // 关闭屏幕背光以节省能耗
+        bsp_backlight_set(false);
+        // 刷新串口输出缓存以防信息截断
+        fflush(stdout);
+        fsync(fileno(stdout));
+        vTaskDelay(pdMS_TO_TICKS(100));
+        
+        esp_err_t err = bsp_power_enter_sleep(BSP_SLEEP_MODE_LIGHT);
+        if (err != ESP_OK)
+        {
+            printf("Failed to enter Light-sleep: %s\n", esp_err_to_name(err));
+            bsp_backlight_set(true);
+            return 1;
+        }
+        
+        // 唤醒后重新开启背光并提示
+        bsp_backlight_set(true);
+        printf("System has woken up from Light-sleep.\n");
+        return 0;
+    }
+    else if (strcmp(mode_str, "deep") == 0)
+    {
+        printf("Preparing to enter Deep-sleep...\n");
+        bsp_backlight_set(false);
+        fflush(stdout);
+        fsync(fileno(stdout));
+        vTaskDelay(pdMS_TO_TICKS(100));
+        
+        esp_err_t err = bsp_power_enter_sleep(BSP_SLEEP_MODE_DEEP);
+        if (err != ESP_OK)
+        {
+            printf("Failed to enter Deep-sleep: %s\n", esp_err_to_name(err));
+            bsp_backlight_set(true);
+            return 1;
+        }
+        return 0;
+    }
+    else
+    {
+        printf("Invalid sleep mode. Usage: goto_sleep <light|deep>\n");
+        return 1;
+    }
 }
 
 /* NVS 读写测试命令的回调函数 */
@@ -654,6 +714,14 @@ static void register_system_commands(void)
         .func = &do_imu_read_cmd,
     };
     ESP_ERROR_CHECK(esp_console_cmd_register(&imu_read_cmd));
+
+    const esp_console_cmd_t goto_sleep_cmd = {
+        .command = "goto_sleep",
+        .help = "Enter sleep mode: goto_sleep <light|deep>",
+        .hint = NULL,
+        .func = &do_goto_sleep_cmd,
+    };
+    ESP_ERROR_CHECK(esp_console_cmd_register(&goto_sleep_cmd));
 }
 
 /* ================================================================

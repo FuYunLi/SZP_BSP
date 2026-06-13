@@ -5,6 +5,7 @@
 #include "bsp_i2c.h"
 #include "bsp_littlefs.h"
 #include "bsp_sdcard.h"
+#include "bsp_power.h"
 #include "qmi8658.h"
 #include "pca9557.h"
 #include "esp_log.h"
@@ -98,6 +99,11 @@ void app_init(void)
         NULL,
         NULL
     ));
+
+    // 6.5. 初始化板级低功耗与电源管理系统 (DFS 和 Automatic Light Sleep)
+#if CONFIG_PM_ENABLE
+    ESP_ERROR_CHECK(bsp_power_init());
+#endif
 
     // 7. 启动调试控制台及应用层命令行接口
     ESP_ERROR_CHECK(app_cli_init());
