@@ -1,0 +1,49 @@
+/**
+ * @file bsp_audio.h
+ * @brief 板载 I2S 音频接口与功放控制板级支持包头文件
+ */
+
+#pragma once
+
+#include "esp_err.h"
+#include "driver/i2s_std.h"
+
+#ifdef __cplusplus
+extern "C" {
+#endif
+
+/**
+ * @brief 初始化板级音频 I2S0 标准通道及配置功放引脚
+ * 
+ * @note 此函数会初始化 I2S0 控制器为 Master 模式，映射 IO 引脚，
+ *       并通过 PCA9557 将功放使能脚 PA_EN 置为低电平（等待起播防杂音）。
+ * 
+ * @return esp_err_t ESP_OK 表示成功，其它值表示失败
+ */
+esp_err_t bsp_audio_i2s_init(void);
+
+/**
+ * @brief 板级音频功放使能控制
+ * 
+ * @param[in] enable true 表示开启功放使能，false 表示关闭功放以降低待机功耗并防范杂音
+ * @return esp_err_t ESP_OK 表示成功，其它值表示失败
+ */
+esp_err_t bsp_audio_pa_enable(bool enable);
+
+/**
+ * @brief 获取已注册的 I2S TX 通道句柄
+ * 
+ * @return i2s_chan_handle_t 返回 I2S TX 通道句柄，如果未初始化则返回 NULL
+ */
+i2s_chan_handle_t bsp_audio_get_tx_handle(void);
+
+/**
+ * @brief 获取已注册的 I2S RX 通道句柄
+ * 
+ * @return i2s_chan_handle_t 返回 I2S RX 通道句柄，如果未初始化则返回 NULL
+ */
+i2s_chan_handle_t bsp_audio_get_rx_handle(void);
+
+#ifdef __cplusplus
+}
+#endif

@@ -9,6 +9,7 @@
 #include "bsp_power.h"
 #include "bsp_lcd.h"
 #include "bsp_touch.h"
+#include "bsp_audio.h"
 #include "qmi8658.h"
 #include "pca9557.h"
 #include "esp_log.h"
@@ -113,6 +114,13 @@ void app_init(void)
     if (ret != ESP_OK)
     {
         ESP_LOGE(TAG, "初始化 Touch 驱动失败 (%s)", esp_err_to_name(ret));
+    }
+
+    // 5.8 初始化板载 I2S 音频与功放使能
+    ret = bsp_audio_i2s_init();
+    if (ret != ESP_OK)
+    {
+        ESP_LOGE(TAG, "初始化音频驱动失败 (%s)", esp_err_to_name(ret));
     }
 
     // 6. 注册按键事件监听器，订阅按键事件并绑定背光联动逻辑
