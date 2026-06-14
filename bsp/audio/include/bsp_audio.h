@@ -43,6 +43,14 @@ i2s_chan_handle_t bsp_audio_get_tx_handle(void);
  * @return i2s_chan_handle_t 返回 I2S RX 通道句柄，如果未初始化则返回 NULL
  */
 i2s_chan_handle_t bsp_audio_get_rx_handle(void);
+ 
+/**
+ * @brief 设置板载音频 Codec 输出音量
+ * 
+ * @param[in] volume 音量大小 (0 ~ 100)
+ * @return esp_err_t ESP_OK 表示成功，其它值表示失败
+ */
+esp_err_t bsp_audio_volume_set(uint8_t volume);
 
 #ifdef __cplusplus
 }

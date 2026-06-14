@@ -806,6 +806,81 @@ static int do_audio_init_cmd(int argc, char **argv)
     return 0;
 }
 
+/* 16kHz 采样率下，1kHz 正弦波的单个完整波形周期（包含 16 个立体声采样，每个采样 4 字节） */
+static const int16_t s_sine_lut_16k[] = {
+    0, 0,          // 0度 (左/右声道相同)
+    6270, 6270,    // 22.5度
+    11585, 11585,  // 45度
+    15137, 15137,  // 67.5度
+    16384, 16384,  // 90度
+    15137, 15137,  // 112.5度
+    11585, 11585,  // 135度
+    6270, 6270,    // 157.5度
+    0, 0,          // 180度
+    -6270, -6270,  // 202.5度
+    -11585, -11585,// 225度
+    -15137, -15137,// 247.5度
+    -16384, -16384,// 270度
+    -15137, -15137,// 292.5度
+    -11585, -11585,// 315度
+    -6270, -6270   // 337.5度
+};
+
+/* 音频测试发声命令的回调函数 */
+static int do_audio_play_cmd(int argc, char **argv)
+{
+    int duration_ms = 2000; // 默认播放 2 秒
+    if (argc >= 2)
+    {
+        duration_ms = atoi(argv[1]);
+        if (duration_ms <= 0)
+        {
+            printf("无效的播放时长参数，默认播放 2000ms\n");
+            duration_ms = 2000;
+        }
+    }
+
+    i2s_chan_handle_t tx_handle = bsp_audio_get_tx_handle();
+    if (tx_handle == NULL)
+    {
+        printf("音频驱动未初始化，正在自动执行初始化...\n");
+        esp_err_t err = bsp_audio_i2s_init();
+        if (err != ESP_OK)
+        {
+            printf("自动初始化音频驱动失败: %s\n", esp_err_to_name(err));
+            return 1;
+        }
+        tx_handle = bsp_audio_get_tx_handle();
+    }
+
+    printf("正在播放 1kHz 正弦波测试音，时长: %d ms...\n", duration_ms);
+
+    // 1. 确保功放已开启
+    bsp_audio_pa_enable(true);
+
+    // 2. 循环写入正弦波数据
+    // 16kHz 采样率下，1kHz 正弦波单个周期包含 16 个立体声点，对应 1ms 时长。
+    uint32_t loops = (uint32_t)duration_ms;
+    size_t bytes_written = 0;
+    esp_err_t ret = ESP_OK;
+
+    for (uint32_t i = 0; i < loops; i++)
+    {
+        ret = i2s_channel_write(tx_handle, s_sine_lut_16k, sizeof(s_sine_lut_16k), &bytes_written, portMAX_DELAY);
+        if (ret != ESP_OK)
+        {
+            printf("写入 I2S 通道失败: %s\n", esp_err_to_name(ret));
+            break;
+        }
+    }
+
+    // 3. 播放结束后，拉低功放以防底噪
+    bsp_audio_pa_enable(false);
+
+    printf("播放完成，功放已关闭。\n");
+    return 0;
+}
+
 
 /* UI Demo 切换诊断命令的回调函数 */
 static int do_ui_demo_cmd(int argc, char **argv)
@@ -1148,6 +1223,14 @@ static void register_system_commands(void)
         .func = &do_audio_init_cmd,
     };
     ESP_ERROR_CHECK(esp_console_cmd_register(&audio_init_cmd));
+
+    const esp_console_cmd_t audio_play_cmd = {
+        .command = "audio_play",
+        .help = "Play 1kHz sine wave sound: audio_play [duration_ms]",
+        .hint = NULL,
+        .func = &do_audio_play_cmd,
+    };
+    ESP_ERROR_CHECK(esp_console_cmd_register(&audio_play_cmd));
 }
 
 /* ================================================================

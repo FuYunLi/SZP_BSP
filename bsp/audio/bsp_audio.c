@@ -1,19 +1,16 @@
-/**
- * @file bsp_audio.c
- * @brief 板载 I2S 音频接口与功放控制板级支持包实现源文件
- */
-
 #include "bsp_audio.h"
 #include "pca9557.h"
 #include "esp_log.h"
 #include "driver/i2s_std.h"
 #include "freertos/FreeRTOS.h"
 #include "freertos/task.h"
+#include "es8311.h"
 
 static const char *TAG = "bsp_audio";
 
 static i2s_chan_handle_t s_tx_handle = NULL;
 static i2s_chan_handle_t s_rx_handle = NULL;
+static es8311_handle_t s_codec_handle = NULL;
 static bool s_audio_initialized = false;
 
 /**
@@ -62,7 +59,7 @@ esp_err_t bsp_audio_i2s_init(void)
         },
     };
 
-    // 3. 初始化 TX 为标准模式
+    // 3. 初始化 TX 为标准模式并开启 I2S 时钟输出
     if (s_tx_handle)
     {
         ret = i2s_channel_init_std_mode(s_tx_handle, &std_cfg);
@@ -72,9 +69,52 @@ esp_err_t bsp_audio_i2s_init(void)
             goto err_free_channels;
         }
         ESP_LOGI(TAG, "I2S TX 通道初始化 STD 模式成功");
+
+        ret = i2s_channel_enable(s_tx_handle);
+        if (ret != ESP_OK)
+        {
+            ESP_LOGE(TAG, "启用 I2S TX 通道失败: %s", esp_err_to_name(ret));
+            goto err_free_channels;
+        }
+        ESP_LOGI(TAG, "I2S TX 通道启用成功，时钟信号已输出");
     }
 
-    // 4. 配置 PCA9557 Pin 1 (PA_EN) 为输出模式
+    // 4. 配置并初始化音频 Codec (ES8311)
+    ESP_LOGI(TAG, "正在通过 I2C 初始化音频 Codec ES8311...");
+    s_codec_handle = es8311_create(I2C_NUM_1, ES8311_ADDRESS_0);
+    if (s_codec_handle == NULL)
+    {
+        ESP_LOGE(TAG, "创建 ES8311 实例句柄失败");
+        ret = ESP_FAIL;
+        goto err_free_channels;
+    }
+
+    es8311_clock_config_t clk_cfg = {
+        .mclk_inverted = false,
+        .sclk_inverted = false,
+        .mclk_from_mclk_pin = true,
+        .mclk_frequency = 16000 * 256, // 16kHz * 256 = 4096000 Hz
+        .sample_frequency = 16000,     // 16kHz
+    };
+
+    ret = es8311_init(s_codec_handle, &clk_cfg, ES8311_RESOLUTION_16, ES8311_RESOLUTION_16);
+    if (ret != ESP_OK)
+    {
+        ESP_LOGE(TAG, "初始化 ES8311 寄存器失败: %s", esp_err_to_name(ret));
+        goto err_free_channels;
+    }
+
+    // 设置初始音量为 80%
+    int volume_set = 80;
+    ret = es8311_voice_volume_set(s_codec_handle, 80, &volume_set);
+    if (ret != ESP_OK)
+    {
+        ESP_LOGE(TAG, "配置 ES8311 音量失败: %s", esp_err_to_name(ret));
+        goto err_free_channels;
+    }
+    ESP_LOGI(TAG, "音频 Codec ES8311 配置音量为 80 完成");
+
+    // 5. 配置 PCA9557 Pin 1 (PA_EN) 为输出模式
     ESP_LOGI(TAG, "配置 PCA9557 扩展芯片 Pin 1 为功放使能输出...");
     ret = pca9557_set_config(1, false);
     if (ret != ESP_OK)
@@ -83,8 +123,8 @@ esp_err_t bsp_audio_i2s_init(void)
         goto err_free_channels;
     }
 
-    // 5. 按照 M16 任务要求，调用 bsp_pca9557 将音频功放使能脚 PA_EN 置为高电平
-    vTaskDelay(pdMS_TO_TICKS(50));
+    // 6. 时序消噪控制：在 Codec 内部电平稳定后（延迟 100ms）再拉高功放使能脚 PA_EN
+    vTaskDelay(pdMS_TO_TICKS(100));
     ret = pca9557_set_output_level(1, 1);
     if (ret != ESP_OK)
     {
@@ -98,8 +138,14 @@ esp_err_t bsp_audio_i2s_init(void)
     return ESP_OK;
 
 err_free_channels:
+    if (s_codec_handle)
+    {
+        es8311_delete(s_codec_handle);
+        s_codec_handle = NULL;
+    }
     if (s_tx_handle)
     {
+        i2s_channel_disable(s_tx_handle);
         i2s_del_channel(s_tx_handle);
         s_tx_handle = NULL;
     }
@@ -134,4 +180,23 @@ i2s_chan_handle_t bsp_audio_get_tx_handle(void)
 i2s_chan_handle_t bsp_audio_get_rx_handle(void)
 {
     return s_rx_handle;
+}
+
+/**
+ * @brief 设置板载音频 Codec 输出音量
+ */
+esp_err_t bsp_audio_volume_set(uint8_t volume)
+{
+    if (s_codec_handle == NULL)
+    {
+        ESP_LOGW(TAG, "Codec 未初始化，无法设置音量");
+        return ESP_ERR_INVALID_STATE;
+    }
+    int volume_set = (int)volume;
+    esp_err_t ret = es8311_voice_volume_set(s_codec_handle, (int)volume, &volume_set);
+    if (ret != ESP_OK)
+    {
+        ESP_LOGE(TAG, "设置音量失败: %s", esp_err_to_name(ret));
+    }
+    return ret;
 }
