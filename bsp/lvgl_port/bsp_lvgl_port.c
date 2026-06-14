@@ -24,7 +24,8 @@ esp_err_t bsp_lvgl_port_init(void)
     ESP_LOGI(TAG, "正在初始化乐鑫官方 esp_lvgl_port 框架...");
 
     // 1. 初始化 LVGL 接口框架与任务机制（内部使用高精度定时器并创建运行 lv_timer_handler 的 FreeRTOS 任务）
-    const lvgl_port_cfg_t port_cfg = ESP_LVGL_PORT_INIT_CONFIG();
+    lvgl_port_cfg_t port_cfg = ESP_LVGL_PORT_INIT_CONFIG();
+    port_cfg.task_affinity = 1; // 显式绑定至 Core 1 (CPU 1)，从而与运行于 Core 0 的无线协议栈及 console_repl 物理隔离
     esp_err_t err = lvgl_port_init(&port_cfg);
     if (err != ESP_OK)
     {
