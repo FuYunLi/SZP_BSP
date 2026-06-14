@@ -1,5 +1,6 @@
 #include "bsp_audio.h"
 #include "pca9557.h"
+#include "bsp_i2c.h"
 #include "esp_log.h"
 #include "driver/i2s_std.h"
 #include "freertos/FreeRTOS.h"
@@ -81,7 +82,7 @@ esp_err_t bsp_audio_i2s_init(void)
 
     // 4. 配置并初始化音频 Codec (ES8311)
     ESP_LOGI(TAG, "正在通过 I2C 初始化音频 Codec ES8311...");
-    s_codec_handle = es8311_create(I2C_NUM_1, ES8311_ADDRESS_0);
+    s_codec_handle = es8311_create(bsp_i2c_get_bus_handle(), ES8311_ADDRESS_0);
     if (s_codec_handle == NULL)
     {
         ESP_LOGE(TAG, "创建 ES8311 实例句柄失败");
