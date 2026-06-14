@@ -52,6 +52,17 @@ i2s_chan_handle_t bsp_audio_get_rx_handle(void);
  */
 esp_err_t bsp_audio_volume_set(uint8_t volume);
 
+/**
+ * @brief 从板载麦克风读取原始音频数据
+ * 
+ * @param[out] dest 接收缓冲区指针
+ * @param[in] size 期望读取的字节数
+ * @param[out] bytes_read 实际读取到的字节数
+ * @param[in] timeout_ms 读取超时时间 (毫秒)
+ * @return esp_err_t ESP_OK 表示成功，其它值表示失败
+ */
+esp_err_t bsp_audio_record_read(void *dest, size_t size, size_t *bytes_read, uint32_t timeout_ms);
+
 #ifdef __cplusplus
 }
 #endif
