@@ -24,6 +24,9 @@
 #include "bsp_power.h"
 #include "bsp_lcd.h"
 #include "bsp_touch.h"
+#include "wifi_service.h"
+#include "ble_service.h"
+#include "esp_netif.h"
 #include "freertos/FreeRTOS.h"
 #include "freertos/task.h"
 #include <dirent.h>
@@ -777,9 +780,180 @@ static int do_ui_demo_cmd(int argc, char **argv)
     return 0;
 }
 
+/* Wi-Fi 连接命令的回调函数 */
+static int do_wifi_connect_cmd(int argc, char **argv)
+{
+    if (argc < 3)
+    {
+        printf("用法: wifi_connect <ssid> <password>\n");
+        return 1;
+    }
+    const char *ssid = argv[1];
+    const char *pwd = argv[2];
+    printf("正在连接 Wi-Fi, SSID: %s...\n", ssid);
+    esp_err_t err = wifi_service_connect(ssid, pwd);
+    if (err == ESP_OK)
+    {
+        printf("连接请求已下发，请在后台观察 IP 获取情况 (可使用 wifi_status 查询)。\n");
+    }
+    else
+    {
+        printf("连接启动失败: %s\n", esp_err_to_name(err));
+    }
+    return 0;
+}
+
+/* Wi-Fi 开启 AP 命令的回调函数 */
+static int do_wifi_ap_cmd(int argc, char **argv)
+{
+    if (argc < 2)
+    {
+        printf("用法: wifi_ap <ssid> [password]\n");
+        return 1;
+    }
+    const char *ssid = argv[1];
+    const char *pwd = (argc >= 3) ? argv[2] : NULL;
+    printf("正在开启 SoftAP 热点, SSID: %s...\n", ssid);
+    esp_err_t err = wifi_service_ap_start(ssid, pwd);
+    if (err == ESP_OK)
+    {
+        printf("SoftAP 开启成功。\n");
+    }
+    else
+    {
+        printf("SoftAP 开启失败: %s\n", esp_err_to_name(err));
+    }
+    return 0;
+}
+
+/* Wi-Fi 清除配置命令的回调函数 */
+static int do_wifi_clear_cmd(int argc, char **argv)
+{
+    printf("正在清除 NVS 中的 Wi-Fi 配置...\n");
+    esp_err_t err = wifi_service_clear_config();
+    if (err == ESP_OK)
+    {
+        printf("Wi-Fi 配置已成功清除。\n");
+    }
+    else
+    {
+        printf("配置清除失败: %s\n", esp_err_to_name(err));
+    }
+    return 0;
+}
+
+/* Wi-Fi 状态查询命令的回调函数 */
+static int do_wifi_status_cmd(int argc, char **argv)
+{
+    wifi_service_state_t state = wifi_service_get_state();
+    const char *state_str = "UNKNOWN";
+    switch (state)
+    {
+        case WIFI_SERVICE_STATE_DISCONNECTED: state_str = "DISCONNECTED"; break;
+        case WIFI_SERVICE_STATE_CONNECTING: state_str = "CONNECTING"; break;
+        case WIFI_SERVICE_STATE_CONNECTED: state_str = "CONNECTED (WAITING FOR IP)"; break;
+        case WIFI_SERVICE_STATE_GOT_IP: state_str = "CONNECTED (GOT IP)"; break;
+        case WIFI_SERVICE_STATE_FAILED: state_str = "FAILED"; break;
+    }
+    printf("Wi-Fi 连接状态: %s\n", state_str);
+
+    if (state == WIFI_SERVICE_STATE_GOT_IP)
+    {
+        esp_netif_ip_info_t ip_info;
+        esp_netif_t *netif = esp_netif_get_handle_from_ifkey("WIFI_STA_DEF");
+        if (netif && esp_netif_get_ip_info(netif, &ip_info) == ESP_OK)
+        {
+            printf("IP 地址  : " IPSTR "\n", IP2STR(&ip_info.ip));
+            printf("子网掩码 : " IPSTR "\n", IP2STR(&ip_info.netmask));
+            printf("网关     : " IPSTR "\n", IP2STR(&ip_info.gw));
+        }
+    }
+    return 0;
+}
+
+/* BLE 广播启动命令的回调函数 */
+static int do_ble_start_cmd(int argc, char **argv)
+{
+    printf("正在启动 BLE 蓝牙广播...\n");
+    esp_err_t err = ble_service_start();
+    if (err == ESP_OK)
+    {
+        printf("蓝牙广播已成功启动。\n");
+    }
+    else
+    {
+        printf("蓝牙广播启动失败: %s\n", esp_err_to_name(err));
+    }
+    return 0;
+}
+
+/* BLE 广播停止命令的回调函数 */
+static int do_ble_stop_cmd(int argc, char **argv)
+{
+    printf("正在停止 BLE 蓝牙广播...\n");
+    esp_err_t err = ble_service_stop();
+    if (err == ESP_OK)
+    {
+        printf("蓝牙广播已停止。\n");
+    }
+    else
+    {
+        printf("蓝牙广播停止失败: %s\n", esp_err_to_name(err));
+    }
+    return 0;
+}
+
 /* 注册系统级的通用诊断指令 */
 static void register_system_commands(void)
 {
+    const esp_console_cmd_t wifi_conn_cmd = {
+        .command = "wifi_connect",
+        .help = "Connect to AP: wifi_connect <ssid> <password>",
+        .hint = NULL,
+        .func = &do_wifi_connect_cmd,
+    };
+    ESP_ERROR_CHECK(esp_console_cmd_register(&wifi_conn_cmd));
+
+    const esp_console_cmd_t wifi_ap_cmd = {
+        .command = "wifi_ap",
+        .help = "Start SoftAP: wifi_ap <ssid> [password]",
+        .hint = NULL,
+        .func = &do_wifi_ap_cmd,
+    };
+    ESP_ERROR_CHECK(esp_console_cmd_register(&wifi_ap_cmd));
+
+    const esp_console_cmd_t wifi_clear_cmd = {
+        .command = "wifi_clear",
+        .help = "Clear saved Wi-Fi configuration in NVS",
+        .hint = NULL,
+        .func = &do_wifi_clear_cmd,
+    };
+    ESP_ERROR_CHECK(esp_console_cmd_register(&wifi_clear_cmd));
+
+    const esp_console_cmd_t wifi_status_cmd = {
+        .command = "wifi_status",
+        .help = "Show Wi-Fi state and IP information",
+        .hint = NULL,
+        .func = &do_wifi_status_cmd,
+    };
+    ESP_ERROR_CHECK(esp_console_cmd_register(&wifi_status_cmd));
+
+    const esp_console_cmd_t ble_start_cmd = {
+        .command = "ble_start",
+        .help = "Start BLE advertising",
+        .hint = NULL,
+        .func = &do_ble_start_cmd,
+    };
+    ESP_ERROR_CHECK(esp_console_cmd_register(&ble_start_cmd));
+
+    const esp_console_cmd_t ble_stop_cmd = {
+        .command = "ble_stop",
+        .help = "Stop BLE advertising",
+        .hint = NULL,
+        .func = &do_ble_stop_cmd,
+    };
+    ESP_ERROR_CHECK(esp_console_cmd_register(&ble_stop_cmd));
+
     const esp_console_cmd_t ui_demo_cmd = {
         .command = "ui_demo",
         .help = "Switch LVGL UI Demos: ui_demo <default|widgets|benchmark|music|stress>",
