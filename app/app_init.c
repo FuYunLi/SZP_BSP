@@ -1,5 +1,6 @@
 #include "app_init.h"
 #include "app_cli.h"
+#include "app_ui.h"
 #include "bsp_backlight.h"
 #include "bsp_key.h"
 #include "bsp_i2c.h"
@@ -128,4 +129,7 @@ void app_init(void)
 
     // 7. 启动调试控制台及应用层命令行接口
     ESP_ERROR_CHECK(app_cli_init());
+
+    // 8. 启动 UI 页面及交互
+    app_ui_start();
 }

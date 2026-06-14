@@ -40,6 +40,33 @@ esp_err_t bsp_lcd_clear(uint16_t color);
  */
 esp_err_t bsp_lcd_draw_bitmap(int x_start, int y_start, int x_end, int y_end, const void *color_data);
 
+#include "esp_lcd_panel_io.h"
+
+/**
+ * @brief 注册 LCD SPI 传输完成中断回调 (面向 LVGL 异步刷新)
+ * 
+ * @param[in] cb 中断回调函数
+ * @param[in] user_ctx 回调上下文参数 (一般为 lv_display_t 句柄)
+ * @return esp_err_t ESP_OK 表示成功，其它值表示失败
+ */
+esp_err_t bsp_lcd_register_trans_done_cb(esp_lcd_panel_io_color_trans_done_cb_t cb, void *user_ctx);
+
+#include "esp_lcd_panel_vendor.h"
+
+/**
+ * @brief 获取 LCD 面板驱动句柄
+ * 
+ * @return esp_lcd_panel_handle_t 面板句柄
+ */
+esp_lcd_panel_handle_t bsp_lcd_get_panel_handle(void);
+
+/**
+ * @brief 获取 LCD IO 驱动句柄
+ * 
+ * @return esp_lcd_panel_io_handle_t IO句柄
+ */
+esp_lcd_panel_io_handle_t bsp_lcd_get_io_handle(void);
+
 #ifdef __cplusplus
 }
 #endif
