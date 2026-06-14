@@ -14,6 +14,8 @@
 #include "esp_log.h"
 #include "esp_event.h"
 #include "nvs_flash.h"
+#include "wifi_service.h"
+#include "ble_service.h"
 
 static const char *TAG = "app_init";
 
@@ -129,6 +131,13 @@ void app_init(void)
 
     // 7. 启动调试控制台及应用层命令行接口
     ESP_ERROR_CHECK(app_cli_init());
+
+    // 7.5. 初始化无线网络 (Wi-Fi 和 NimBLE 蓝牙)
+    wifi_service_init();
+    ble_service_init();
+    
+    // 自动加载 NVS 历史配置尝试连接 (后台异步重连，不阻塞主线程启动 UI)
+    wifi_service_connect_saved();
 
     // 8. 启动 UI 页面及交互
     app_ui_start();
