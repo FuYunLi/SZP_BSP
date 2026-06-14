@@ -48,20 +48,25 @@ esp_err_t bsp_lvgl_port_init(void)
     const lvgl_port_display_cfg_t disp_cfg = {
         .io_handle = io,
         .panel_handle = panel,
-        .buffer_size = LCD_H_RES * 40, // 扩大缓冲区深度到 40 行，以提高渲染效率
-        .double_buffer = true,        // 启用乒乓双缓冲提高并发帧率
+        // 【LVGL 缓冲区策略最终方案】
+        // 问题根源：PSRAM 缓冲区需要 GDMA 经 MSPI 总线读取，当 Wi-Fi/BLE 同时大量访问 PSRAM 时
+        //          MSPI 总线竞争导致 SPI DMA 传输偶发性阻塞 5+ 秒，触发 WDT 复位
+        // 解决方案：使用内部 SRAM 缓冲区（6.4KB），完全脱离 MSPI 总线竞争路径
+        //          内核保留了 32KB 内部 DMA 专用内存（CONFIG_SPIRAM_MALLOC_RESERVE_INTERNAL=32768），足够容纳
+        .buffer_size = LCD_H_RES * 10,    // 10行 × 320 × 2 = 6400 字节，占用保留 DMA 池的 ~20%
+        .double_buffer = false,            // 单缓冲，避免双倍 SRAM 消耗（内部 SRAM 充裕即可开启双缓冲再评估）
         .hres = LCD_H_RES,
         .vres = LCD_V_RES,
         .color_format = LV_COLOR_FORMAT_RGB565,
         .rotation = {
-            .swap_xy = true,          // 与 bsp_lcd 硬件初始化时的配置严格对齐
+            .swap_xy = true,               // 与 bsp_lcd 硬件初始化时的配置严格对齐
             .mirror_x = true,
             .mirror_y = false,
         },
         .flags = {
-            .buff_dma = true,         // 使用 DMA 缓冲
-            .buff_spiram = true,      // 启用外部 PSRAM，释放内部 SRAM
-            .swap_bytes = false,      // 因为 ST7789 已配置硬件小端解析 (LCD_RGB_DATA_ENDIAN_LITTLE)，故 CPU 侧无需字节交换
+            .buff_dma = true,              // DMA 模式（SRAM 缓冲区可高效直接 DMA 传输，无 MSPI 竞争）
+            .buff_spiram = false,          // 禁用 PSRAM 缓冲，彻底消除 MSPI 总线竞争引发的 WDT 问题
+            .swap_bytes = false,           // ST7789 配置了硬件小端字节序解析，CPU 侧无需软件交换
         }
     };
 

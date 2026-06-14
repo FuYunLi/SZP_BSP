@@ -45,7 +45,7 @@ esp_err_t bsp_lcd_init(void)
         .miso_io_num = -1,
         .quadwp_io_num = -1,
         .quadhd_io_num = -1,
-        .max_transfer_sz = LCD_H_RES * CLEAR_BUFFER_LINES * sizeof(uint16_t), // 设置对应传输限额的缓冲区大小
+        .max_transfer_sz = LCD_H_RES * LCD_V_RES * sizeof(uint16_t), // 设置最大可传输整屏大小的缓冲区，以兼容 LVGL 的大块缓冲区异步刷新
     };
 
     esp_err_t ret = spi_bus_initialize(LCD_HOST, &buscfg, SPI_DMA_CH_AUTO);
