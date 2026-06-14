@@ -188,3 +188,36 @@ esp_err_t bsp_lcd_draw_bitmap(int x_start, int y_start, int x_end, int y_end, co
     }
     return esp_lcd_panel_draw_bitmap(s_panel_handle, x_start, y_start, x_end, y_end, color_data);
 }
+
+/**
+ * @brief 注册 LCD SPI 传输完成中断回调 (面向 LVGL 异步刷新)
+ */
+esp_err_t bsp_lcd_register_trans_done_cb(esp_lcd_panel_io_color_trans_done_cb_t cb, void *user_ctx)
+{
+    if (!s_lcd_initialized || s_io_handle == NULL)
+    {
+        ESP_LOGE(TAG, "LCD IO 未初始化，无法注册回调");
+        return ESP_ERR_INVALID_STATE;
+    }
+
+    esp_lcd_panel_io_callbacks_t cbs = {
+        .on_color_trans_done = cb,
+    };
+    return esp_lcd_panel_io_register_event_callbacks(s_io_handle, &cbs, user_ctx);
+}
+
+/**
+ * @brief 获取 LCD 面板驱动句柄
+ */
+esp_lcd_panel_handle_t bsp_lcd_get_panel_handle(void)
+{
+    return s_panel_handle;
+}
+
+/**
+ * @brief 获取 LCD IO 驱动句柄
+ */
+esp_lcd_panel_io_handle_t bsp_lcd_get_io_handle(void)
+{
+    return s_io_handle;
+}
