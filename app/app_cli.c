@@ -24,6 +24,7 @@
 #include "bsp_power.h"
 #include "bsp_lcd.h"
 #include "bsp_touch.h"
+#include "bsp_audio.h"
 #include "wifi_service.h"
 #include "ble_service.h"
 #include "esp_netif.h"
@@ -763,6 +764,48 @@ static int do_touch_read_cmd(int argc, char **argv)
     return 0;
 }
 
+/* 音频功放控制测试命令的回调函数 */
+static int do_audio_pa_cmd(int argc, char **argv)
+{
+    if (argc < 2)
+    {
+        printf("用法: audio_pa <0|1>\n");
+        return 1;
+    }
+    
+    int enable = atoi(argv[1]);
+    if (enable != 0 && enable != 1)
+    {
+        printf("无效的参数。用法: audio_pa <0|1>\n");
+        return 1;
+    }
+    
+    esp_err_t err = bsp_audio_pa_enable(enable == 1);
+    if (err != ESP_OK)
+    {
+        printf("设置音频功放失败: %s\n", esp_err_to_name(err));
+        return 1;
+    }
+    
+    printf("音频功放已设置为: %s\n", enable ? "开启" : "关闭");
+    return 0;
+}
+
+/* 音频初始化测试命令的回调函数 */
+static int do_audio_init_cmd(int argc, char **argv)
+{
+    printf("正在初始化板载音频系统 (I2S0 & PA)...\n");
+    esp_err_t err = bsp_audio_i2s_init();
+    if (err != ESP_OK)
+    {
+        printf("音频初始化失败: %s\n", esp_err_to_name(err));
+        return 1;
+    }
+    
+    printf("音频系统初始化成功。\n");
+    return 0;
+}
+
 
 /* UI Demo 切换诊断命令的回调函数 */
 static int do_ui_demo_cmd(int argc, char **argv)
@@ -1089,6 +1132,22 @@ static void register_system_commands(void)
         .func = &do_touch_read_cmd,
     };
     ESP_ERROR_CHECK(esp_console_cmd_register(&touch_read_cmd));
+
+    const esp_console_cmd_t audio_pa_cmd = {
+        .command = "audio_pa",
+        .help = "Control Audio PA: audio_pa <0|1>",
+        .hint = NULL,
+        .func = &do_audio_pa_cmd,
+    };
+    ESP_ERROR_CHECK(esp_console_cmd_register(&audio_pa_cmd));
+
+    const esp_console_cmd_t audio_init_cmd = {
+        .command = "audio_init",
+        .help = "Initialize Board Audio (I2S0 & PA)",
+        .hint = NULL,
+        .func = &do_audio_init_cmd,
+    };
+    ESP_ERROR_CHECK(esp_console_cmd_register(&audio_init_cmd));
 }
 
 /* ================================================================
