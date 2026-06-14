@@ -25,6 +25,8 @@
 #include "bsp_lcd.h"
 #include "bsp_touch.h"
 #include "bsp_audio.h"
+#include "bsp_camera.h"
+#include "img_converters.h"
 #include "wifi_service.h"
 #include "ble_service.h"
 #include "esp_netif.h"
@@ -1131,6 +1133,115 @@ static int do_audio_play_wav_cmd(int argc, char **argv)
     return 0;
 }
 
+/* 初始化摄像头指令的回调函数 */
+static int do_camera_init_cmd(int argc, char **argv)
+{
+    printf("开始初始化并唤醒 DVP 摄像头 (GC0308)...\n");
+    esp_err_t err = bsp_camera_init();
+    if (err != ESP_OK)
+    {
+        printf("错误: 摄像头初始化失败 (%s)\n", esp_err_to_name(err));
+        return 1;
+    }
+    printf("摄像头初始化及探测成功！\n");
+    return 0;
+}
+
+/* 摄像头拍照并存入 SD 卡指令的回调函数 */
+static int do_camera_capture_cmd(int argc, char **argv)
+{
+    if (argc < 2)
+    {
+        printf("用法: camera_capture <filename.bmp>\n");
+        printf("例如: camera_capture snap.bmp\n");
+        return 1;
+    }
+
+    const char *file_name = argv[1];
+    if (!bsp_sdcard_is_mounted())
+    {
+        printf("错误: SD卡未挂载，无法保存照片。\n");
+        return 1;
+    }
+
+    // 为防此前未初始化，在此执行一次硬件初始化与唤醒
+    esp_err_t err = bsp_camera_init();
+    if (err != ESP_OK)
+    {
+        printf("错误: 初始化并唤醒摄像头失败\n");
+        return 1;
+    }
+
+    printf("摄像头已唤醒，正在等待传感器自动曝光稳定 (500ms)...\n");
+    vTaskDelay(pdMS_TO_TICKS(500));
+
+    // 丢弃前面可能曝光不均的数帧
+    camera_fb_t *fb = NULL;
+    for (int i = 0; i < 3; i++)
+    {
+        fb = bsp_camera_fb_get();
+        if (fb)
+        {
+            bsp_camera_fb_return(fb);
+        }
+    }
+
+    printf("开始抓取图像帧...\n");
+    fb = bsp_camera_fb_get();
+    if (!fb)
+    {
+        printf("错误: 抓取图像帧失败，fb 为空\n");
+        bsp_camera_deinit();
+        return 1;
+    }
+
+    printf("图像抓取成功: 分辨率 %dx%d, 大小 %d 字节\n", (int)fb->width, (int)fb->height, (int)fb->len);
+    printf("正在将 RGB565 转换为标准 BMP 格式...\n");
+
+    uint8_t *bmp_buf = NULL;
+    size_t bmp_len = 0;
+    bool converted = frame2bmp(fb, &bmp_buf, &bmp_len);
+
+    // 及时释放底层 FrameBuffer
+    bsp_camera_fb_return(fb);
+
+    if (!converted)
+    {
+        printf("错误: 转码 BMP 格式失败\n");
+        bsp_camera_deinit();
+        return 1;
+    }
+
+    char path[128];
+    snprintf(path, sizeof(path), "/sdcard/%s", file_name);
+    printf("正在写入 SD 卡: [%s]...\n", path);
+
+    FILE *f = fopen(path, "wb");
+    if (f == NULL)
+    {
+        printf("错误: 无法创建或打开目标文件 [%s]\n", path);
+        free(bmp_buf);
+        bsp_camera_deinit();
+        return 1;
+    }
+
+    size_t written = fwrite(bmp_buf, 1, bmp_len, f);
+    fclose(f);
+    free(bmp_buf);
+
+    // 拍照完成，恢复摄像头至休眠省电模式
+    bsp_camera_deinit();
+
+    if (written != bmp_len)
+    {
+        printf("错误: 数据写入不完整，仅写入 %d/%d 字节\n", (int)written, (int)bmp_len);
+        return 1;
+    }
+
+    printf("成功保存照片到 [%s] (%d 字节)\n", path, (int)bmp_len);
+    return 0;
+}
+
 
 /* UI Demo 切换诊断命令的回调函数 */
 static int do_ui_demo_cmd(int argc, char **argv)
@@ -1497,6 +1608,22 @@ static void register_system_commands(void)
         .func = &do_audio_play_wav_cmd,
     };
     ESP_ERROR_CHECK(esp_console_cmd_register(&audio_play_wav_cmd));
+
+    const esp_console_cmd_t camera_init_cmd = {
+        .command = "camera_init",
+        .help = "Initialize and probe Board DVP Camera (GC0308)",
+        .hint = NULL,
+        .func = &do_camera_init_cmd,
+    };
+    ESP_ERROR_CHECK(esp_console_cmd_register(&camera_init_cmd));
+
+    const esp_console_cmd_t camera_capture_cmd = {
+        .command = "camera_capture",
+        .help = "Capture camera frame to SD card as BMP: camera_capture <filename.bmp>",
+        .hint = NULL,
+        .func = &do_camera_capture_cmd,
+    };
+    ESP_ERROR_CHECK(esp_console_cmd_register(&camera_capture_cmd));
 }
 
 /* ================================================================
