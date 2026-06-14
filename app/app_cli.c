@@ -4,6 +4,7 @@
  */
 
 #include "app_cli.h"
+#include "app_ui.h"
 #include "console_service.h"
 #include "bsp_backlight.h"
 #include "esp_console.h"
@@ -760,9 +761,33 @@ static int do_touch_read_cmd(int argc, char **argv)
 }
 
 
+/* UI Demo 切换诊断命令的回调函数 */
+static int do_ui_demo_cmd(int argc, char **argv)
+{
+    if (argc < 2)
+    {
+        printf("用法: ui_demo <default | widgets | benchmark | music | stress>\n");
+        return 1;
+    }
+    
+    const char *demo_name = argv[1];
+    printf("正在切换 UI 演示 Demo 到: %s...\n", demo_name);
+    app_ui_show_demo(demo_name);
+    printf("UI 切换指令已下发。\n");
+    return 0;
+}
+
 /* 注册系统级的通用诊断指令 */
 static void register_system_commands(void)
 {
+    const esp_console_cmd_t ui_demo_cmd = {
+        .command = "ui_demo",
+        .help = "Switch LVGL UI Demos: ui_demo <default|widgets|benchmark|music|stress>",
+        .hint = NULL,
+        .func = &do_ui_demo_cmd,
+    };
+    ESP_ERROR_CHECK(esp_console_cmd_register(&ui_demo_cmd));
+
     const esp_console_cmd_t version_cmd = {
         .command = "version",
         .help = "Get system/BSP version information",

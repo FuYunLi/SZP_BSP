@@ -51,9 +51,16 @@ esp_err_t bsp_lvgl_port_init(void)
         .double_buffer = true,        // 启用乒乓双缓冲提高并发帧率
         .hres = LCD_H_RES,
         .vres = LCD_V_RES,
+        .color_format = LV_COLOR_FORMAT_RGB565,
+        .rotation = {
+            .swap_xy = true,          // 与 bsp_lcd 硬件初始化时的配置严格对齐
+            .mirror_x = true,
+            .mirror_y = false,
+        },
         .flags = {
             .buff_dma = true,         // 使用 DMA 缓冲
             .buff_spiram = false,     // 禁用外部 PSRAM，强制存放在内部 SRAM (Zero Cache Miss)
+            .swap_bytes = false,      // 因为 ST7789 已配置硬件小端解析 (LCD_RGB_DATA_ENDIAN_LITTLE)，故 CPU 侧无需字节交换
         }
     };
 
