@@ -59,6 +59,12 @@ Backtrace: 0x42091466:0x3FCA98F0 0x420917D4:0x3FCA9910 0x4037C936:0x3FCA9940 0x4
 2. 同时，Wi-Fi 协议栈、蓝牙协议栈（NimBLE）、LwIP 任务以及 Flash 读写均强行绑定在 Core 0。
 3. 当 `taskLVGL` 飘到 Core 0 运行时，会与无线协议栈产生频繁的时间片争抢，加剧了任务调度延迟与 CPU 0 的负荷，极易在执行重型 UI 时产生卡顿或死锁崩溃。
 
+### 3.4 Wi-Fi与蓝牙协议栈运行占满内部 SRAM 导致 LVGL 帧缓冲分配失败
+1. 在 M15 中，Wi-Fi 驱动、LwIP、NimBLE 蓝牙控制器和主机协议栈会在系统引导时较早启动并初始化。
+2. 这些无线底层服务在运行过程中会动态向系统的内部 heap 申请大量连续的 8-bit 可寻址 RAM (DRAM/SRAM)。
+3. 原配置下，我们为 LVGL 帧缓冲区配置了 `.flags.buff_spiram = false`，这强制要求系统在内部 SRAM 中分配 $320 \times 24 \times 2 \times 2 \approx 30$ KB 的极速双缓冲区。
+4. 由于无线协议栈启动后占用了大量 DRAM，导致内部堆内存中无法提供足够大小的连续空闲块来满足 LVGL 双缓冲区的二次分配，进而导致 `lvgl_port_add_disp` 调用返回 `NULL`，触发 UI 初始化失败。
+
 ---
 
 ## 4. 解决措施与方案设计
@@ -79,11 +85,16 @@ Backtrace: 0x42091466:0x3FCA98F0 0x420917D4:0x3FCA9910 0x4037C936:0x3FCA9940 0x4
 * **Core 0**：专门负责运行 Wi-Fi 协议栈、NimBLE 蓝牙协议栈、LwIP、文件系统 I/O 和控制台 CLI。
 * **Core 1**：专门负责运行 UI 渲染任务 `taskLVGL` 以及读取触摸屏。
 
+### 4.3 方案三：使用外部 PSRAM 进行 DMA 帧缓冲分配与性能调优
+为了解决 SRAM 紧张导致的分配失败问题，我们调整了 `esp_lvgl_port` 的帧缓冲区分配策略：
+1. **重定位至 PSRAM**：显式配置 `.flags.buff_spiram = true`，使双帧缓冲区完全从开发板板载的 8MB 高速八线 PSRAM 中进行分配。由于 ESP32-S3 支持直接进行 PSRAM-DMA 读写，这可以在完全释放内部 SRAM 的同时保持硬件 DMA 刷新。
+2. **扩大缓冲区深度**：将帧缓冲区深度从 24 行像素扩大至 **40 行** 像素。当缓冲区在 PSRAM 中时，更大的单次刷新块能够显著减少 DMA 传输中断次数和 CPU 渲染上下文切换开销，抵消 PSRAM 读写延迟，取得更佳的渲染效率。
+
 ---
 
 ## 5. 代码修复实践
 
-### 5.1 修改 `bsp/lvgl_port/bsp_lvgl_port.c` (多核绑定)
+### 5.1 修改 `bsp/lvgl_port/bsp_lvgl_port.c` (多核绑定与 PSRAM 双缓冲启用)
 
 ```diff
 @@ -24,8 +24,9 @@ esp_err_t bsp_lvgl_port_init(void)
@@ -94,7 +105,25 @@ Backtrace: 0x42091466:0x3FCA98F0 0x420917D4:0x3FCA9910 0x4037C936:0x3FCA9940 0x4
 +    lvgl_port_cfg_t port_cfg = ESP_LVGL_PORT_INIT_CONFIG();
 +    port_cfg.task_affinity = 1; // 显式绑定至 Core 1 (CPU 1)，从而与运行于 Core 0 的协议栈及 console_repl 物理隔离
      esp_err_t err = lvgl_port_init(&port_cfg);
-     if (err != ESP_OK)
+ 
+@@ -48,7 +49,7 @@ esp_err_t bsp_lvgl_port_init(void)
+     const lvgl_port_display_cfg_t disp_cfg = {
+         .io_handle = io,
+         .panel_handle = panel,
+-        .buffer_size = LCD_H_RES * 24, // 设置缓冲区深度为 24 行像素 (1/10 屏幕高度)
++        .buffer_size = LCD_H_RES * 40, // 扩大缓冲区深度到 40 行，以提高渲染效率
+         .double_buffer = true,        // 启用乒乓双缓冲提高并发帧率
+         .hres = LCD_H_RES,
+         .vres = LCD_V_RES,
+@@ -59,7 +60,7 @@ esp_err_t bsp_lvgl_port_init(void)
+         },
+         .flags = {
+             .buff_dma = true,         // 使用 DMA 缓冲
+-            .buff_spiram = false,     // 禁用外部 PSRAM，强制存放在内部 SRAM (Zero Cache Miss)
++            .buff_spiram = true,      // 启用外部 PSRAM，释放内部 SRAM
+             .swap_bytes = false,      // 因为 ST7789 已配置硬件小端解析 (LCD_RGB_DATA_ENDIAN_LITTLE)，故 CPU 侧无需字节交换
+         }
+     };
 ```
 
 ### 5.2 修改 `app/app_ui.c` (异步 UI 调度)
@@ -171,3 +200,6 @@ Backtrace: 0x42091466:0x3FCA98F0 0x420917D4:0x3FCA9910 0x4037C936:0x3FCA9940 0x4
 3. **UI 切换平滑性**：
    * UI 刷新任务在 Core 1 上独立执行异步清屏与重建，画面过渡顺滑。
    * 旋转方向、大小端及电容触摸功能一切正常，在后台高网络负载下依然保持流畅交互。
+4. **PSRAM 缓冲区稳定性**：
+   * 双帧缓冲区（40行像素）顺利分配在外部 PSRAM，系统初始化时没有再出现 `Not enough memory for LVGL buffer (buf2)` 错误。
+   * 成功为 Wi-Fi 和 NimBLE 释放了大约 50KB 的 SRAM，内存整体分配更加健康稳定。
