@@ -48,7 +48,7 @@ esp_err_t bsp_lvgl_port_init(void)
     const lvgl_port_display_cfg_t disp_cfg = {
         .io_handle = io,
         .panel_handle = panel,
-        .buffer_size = LCD_H_RES * 24, // 设置缓冲区深度为 24 行像素 (1/10 屏幕高度)
+        .buffer_size = LCD_H_RES * 40, // 扩大缓冲区深度到 40 行，以提高渲染效率
         .double_buffer = true,        // 启用乒乓双缓冲提高并发帧率
         .hres = LCD_H_RES,
         .vres = LCD_V_RES,
@@ -60,7 +60,7 @@ esp_err_t bsp_lvgl_port_init(void)
         },
         .flags = {
             .buff_dma = true,         // 使用 DMA 缓冲
-            .buff_spiram = false,     // 禁用外部 PSRAM，强制存放在内部 SRAM (Zero Cache Miss)
+            .buff_spiram = true,      // 启用外部 PSRAM，释放内部 SRAM
             .swap_bytes = false,      // 因为 ST7789 已配置硬件小端解析 (LCD_RGB_DATA_ENDIAN_LITTLE)，故 CPU 侧无需字节交换
         }
     };
