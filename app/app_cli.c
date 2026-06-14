@@ -1022,6 +1022,115 @@ static int do_audio_record_cmd(int argc, char **argv)
     return 0;
 }
 
+/* 播放 SD 卡内 WAV 音频文件指令的回调函数 */
+static int do_audio_play_wav_cmd(int argc, char **argv)
+{
+    if (argc < 2)
+    {
+        printf("用法: audio_play_wav <filename>\n");
+        printf("例如: audio_play_wav test.wav\n");
+        return 1;
+    }
+
+    const char *file_name = argv[1];
+    if (!bsp_sdcard_is_mounted())
+    {
+        printf("错误: SD卡未挂载，无法播放录音。\n");
+        return 1;
+    }
+
+    char path[128];
+    snprintf(path, sizeof(path), "/sdcard/%s", file_name);
+
+    FILE *f = fopen(path, "rb");
+    if (f == NULL)
+    {
+        printf("错误: 无法打开文件 %s\n", path);
+        return 1;
+    }
+
+    // 读取 WAV 文件头并校验
+    wav_header_t header;
+    if (fread(&header, 1, sizeof(header), f) != sizeof(header))
+    {
+        printf("错误: 无法读取 WAV 文件头\n");
+        fclose(f);
+        return 1;
+    }
+
+    if (memcmp(header.riff_id, "RIFF", 4) != 0 || memcmp(header.wave_id, "WAVE", 4) != 0)
+    {
+        printf("错误: 该文件不是有效的 WAV 格式\n");
+        fclose(f);
+        return 1;
+    }
+
+    printf("解析 WAV 成功: 采样率 %dHz, 通道数 %d, 精度 %d-bit, 数据大小 %d 字节\n",
+           (int)header.sample_rate, (int)header.channels, (int)header.bits_per_sample, (int)header.data_size);
+
+    i2s_chan_handle_t tx_handle = bsp_audio_get_tx_handle();
+    if (tx_handle == NULL)
+    {
+        printf("错误: I2S TX 通道未初始化\n");
+        fclose(f);
+        return 1;
+    }
+
+    // 使能功放
+    bsp_audio_pa_enable(true);
+    printf("开始播放 [%s]...\n", path);
+
+    #define PLAY_BUF_SIZE 1024
+    uint8_t *buf = malloc(PLAY_BUF_SIZE);
+    if (buf == NULL)
+    {
+        printf("错误: 分配播放数据缓存失败\n");
+        bsp_audio_pa_enable(false);
+        fclose(f);
+        return 1;
+    }
+
+    uint32_t total_played = 0;
+    size_t bytes_written = 0;
+    
+    // 定位到数据段起始位置（跳过 44 字节文件头）
+    fseek(f, 44, SEEK_SET);
+
+    while (total_played < header.data_size)
+    {
+        uint32_t to_read = header.data_size - total_played;
+        if (to_read > PLAY_BUF_SIZE)
+        {
+            to_read = PLAY_BUF_SIZE;
+        }
+
+        size_t read_bytes = fread(buf, 1, to_read, f);
+        if (read_bytes == 0)
+        {
+            break;
+        }
+
+        esp_err_t err = i2s_channel_write(tx_handle, buf, read_bytes, &bytes_written, portMAX_DELAY);
+        if (err != ESP_OK)
+        {
+            printf("\n写入 I2S 发生错误: %s\n", esp_err_to_name(err));
+            break;
+        }
+
+        total_played += read_bytes;
+        printf("\r播放进度: %d%% (%d/%d 字节)", (int)(total_played * 100 / header.data_size), (int)total_played, (int)header.data_size);
+        fflush(stdout);
+    }
+
+    printf("\n播放结束。\n");
+    free(buf);
+    fclose(f);
+
+    // 播放结束后拉低功放防底噪
+    bsp_audio_pa_enable(false);
+    return 0;
+}
+
 
 /* UI Demo 切换诊断命令的回调函数 */
 static int do_ui_demo_cmd(int argc, char **argv)
@@ -1380,6 +1489,14 @@ static void register_system_commands(void)
         .func = &do_audio_record_cmd,
     };
     ESP_ERROR_CHECK(esp_console_cmd_register(&audio_record_cmd));
+
+    const esp_console_cmd_t audio_play_wav_cmd = {
+        .command = "audio_play_wav",
+        .help = "Play WAV sound from SD card: audio_play_wav <filename>",
+        .hint = NULL,
+        .func = &do_audio_play_wav_cmd,
+    };
+    ESP_ERROR_CHECK(esp_console_cmd_register(&audio_play_wav_cmd));
 }
 
 /* ================================================================
