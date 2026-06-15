@@ -61,6 +61,7 @@ esp_err_t bsp_lcd_init(void)
     if (ret != ESP_OK)
     {
         ESP_LOGE(TAG, "配置 PCA9557 扩展引脚为输出失败: %s", esp_err_to_name(ret));
+        spi_bus_free(LCD_HOST);
         return ret;
     }
 
@@ -79,6 +80,7 @@ esp_err_t bsp_lcd_init(void)
     if (ret != ESP_OK)
     {
         ESP_LOGE(TAG, "创建 LCD IO 句柄失败: %s", esp_err_to_name(ret));
+        spi_bus_free(LCD_HOST);
         return ret;
     }
 
@@ -94,6 +96,9 @@ esp_err_t bsp_lcd_init(void)
     if (ret != ESP_OK)
     {
         ESP_LOGE(TAG, "加载 ST7789 面板驱动失败: %s", esp_err_to_name(ret));
+        esp_lcd_panel_io_del(s_io_handle);
+        s_io_handle = NULL;
+        spi_bus_free(LCD_HOST);
         return ret;
     }
 
@@ -102,7 +107,7 @@ esp_err_t bsp_lcd_init(void)
     if (ret != ESP_OK)
     {
         ESP_LOGE(TAG, "重置 LCD 面板失败: %s", esp_err_to_name(ret));
-        return ret;
+        goto err_cleanup;
     }
 
     ESP_LOGI(TAG, "拉低 LCD_CS 使能通信...");
@@ -111,7 +116,7 @@ esp_err_t bsp_lcd_init(void)
     if (ret != ESP_OK)
     {
         ESP_LOGE(TAG, "拉低 LCD_CS 失败: %s", esp_err_to_name(ret));
-        return ret;
+        goto err_cleanup;
     }
 
     ESP_LOGI(TAG, "正在执行 LCD 面板初始化寄存器配置...");
@@ -119,7 +124,7 @@ esp_err_t bsp_lcd_init(void)
     if (ret != ESP_OK)
     {
         ESP_LOGE(TAG, "初始化 LCD 面板失败: %s", esp_err_to_name(ret));
-        return ret;
+        goto err_cleanup;
     }
 
     // 屏幕显示基本配置：开启显示、开启反色、坐标轴调换、X轴/Y轴镜像配置
@@ -133,17 +138,28 @@ esp_err_t bsp_lcd_init(void)
     if (s_clear_buffer == NULL)
     {
         ESP_LOGE(TAG, "申请静态清屏缓存失败，内存不足");
-        esp_lcd_panel_del(s_panel_handle);
-        esp_lcd_panel_io_del(s_io_handle);
-        spi_bus_free(LCD_HOST);
-        s_panel_handle = NULL;
-        s_io_handle = NULL;
-        return ESP_ERR_NO_MEM;
+        ret = ESP_ERR_NO_MEM;
+        goto err_cleanup;
     }
 
     s_lcd_initialized = true;
     ESP_LOGI(TAG, "LCD 驱动配置及初始化成功完成");
     return ESP_OK;
+
+err_cleanup:
+    // 统一的错误清理路径：释放所有已分配的资源
+    if (s_panel_handle != NULL)
+    {
+        esp_lcd_panel_del(s_panel_handle);
+        s_panel_handle = NULL;
+    }
+    if (s_io_handle != NULL)
+    {
+        esp_lcd_panel_io_del(s_io_handle);
+        s_io_handle = NULL;
+    }
+    spi_bus_free(LCD_HOST);
+    return ret;
 }
 
 /**
