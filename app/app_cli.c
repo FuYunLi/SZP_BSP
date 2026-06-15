@@ -4,6 +4,7 @@
  */
 
 #include "app_cli.h"
+#include "app_camera_stream.h"
 #include "app_ui.h"
 #include "ble_service.h"
 #include "bsp_audio.h"
@@ -23,7 +24,6 @@
 #include "esp_netif.h"
 #include "freertos/FreeRTOS.h"
 #include "freertos/task.h"
-#include "http_stream_server.h"
 #include "img_converters.h"
 #include "nvs.h"
 #include "nvs_flash.h"
@@ -1093,26 +1093,26 @@ static int do_camera_capture_cmd(int argc, char **argv) {
 
 /* 启动HTTP流媒体服务器的回调函数 */
 static int do_stream_start_cmd(int argc, char **argv) {
-  printf("正在启动 HTTP 流媒体服务器...\n");
-  esp_err_t err = http_stream_server_start();
+  printf("正在启动摄像头流媒体应用...\n");
+  esp_err_t err = app_camera_stream_start();
   if (err != ESP_OK) {
-    printf("错误: HTTP 流媒体服务器启动失败 (%s)\n", esp_err_to_name(err));
+    printf("错误: 摄像头流媒体应用启动失败 (%s)\n", esp_err_to_name(err));
     return 1;
   }
-  printf("HTTP 流媒体服务器已启动！\n");
-  printf("请在浏览器中访问: http://<设备IP>/stream\n");
+  printf("摄像头流媒体应用已启动！\n");
+  printf("请在浏览器中访问: http://<设备IP>:8080/stream\n");
   return 0;
 }
 
 /* 停止HTTP流媒体服务器的回调函数 */
 static int do_stream_stop_cmd(int argc, char **argv) {
-  printf("正在停止 HTTP 流媒体服务器...\n");
-  esp_err_t err = http_stream_server_stop();
+  printf("正在停止摄像头流媒体应用...\n");
+  esp_err_t err = app_camera_stream_stop();
   if (err != ESP_OK) {
-    printf("错误: HTTP 流媒体服务器停止失败 (%s)\n", esp_err_to_name(err));
+    printf("错误: 摄像头流媒体应用停止失败 (%s)\n", esp_err_to_name(err));
     return 1;
   }
-  printf("HTTP 流媒体服务器已停止！\n");
+  printf("摄像头流媒体应用已停止！\n");
   return 0;
 }
 
