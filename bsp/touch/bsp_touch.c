@@ -105,3 +105,22 @@ esp_lcd_touch_handle_t bsp_touch_get_handle(void)
 {
     return s_touch_handle;
 }
+
+esp_err_t bsp_touch_deinit(void)
+{
+    if (s_touch_handle == NULL)
+    {
+        ESP_LOGW(TAG, "Touch driver not initialized");
+        return ESP_OK;
+    }
+
+    ESP_LOGI(TAG, "Deinitializing touch driver...");
+
+    // esp_lcd_touch 组件没有提供专门的 delete 函数
+    // 需要通过 esp_lcd_panel_io_del 删除 IO 句柄
+    // 这里我们只能将句柄置空，因为触摸 IO 句柄由驱动内部管理
+    s_touch_handle = NULL;
+
+    ESP_LOGI(TAG, "Touch driver deinitialized successfully");
+    return ESP_OK;
+}

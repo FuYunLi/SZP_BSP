@@ -106,3 +106,29 @@ lv_display_t *bsp_lvgl_port_get_display(void)
 {
     return s_disp;
 }
+
+esp_err_t bsp_lvgl_port_deinit(void)
+{
+    if (!s_port_initialized)
+    {
+        ESP_LOGW(TAG, "LVGL 移植层未初始化");
+        return ESP_OK;
+    }
+
+    ESP_LOGI(TAG, "正在反初始化 LVGL 移植层...");
+
+    // esp_lvgl_port 组件的 deinit 需要通过 lvgl_port_deinit
+    // 先移除显示设备和输入设备，然后调用 lvgl_port_deinit
+    if (s_disp != NULL)
+    {
+        lvgl_port_remove_disp(s_disp);
+        s_disp = NULL;
+    }
+
+    // 反初始化 LVGL Port 框架
+    lvgl_port_deinit();
+
+    s_port_initialized = false;
+    ESP_LOGI(TAG, "LVGL 移植层反初始化完成");
+    return ESP_OK;
+}

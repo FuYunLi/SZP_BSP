@@ -36,6 +36,11 @@ void bsp_key_init(void);
  */
 bool bsp_key_is_pressed(void);
 
+/**
+ * @brief 反初始化板载按键，释放按键设备资源
+ */
+void bsp_key_deinit(void);
+
 #ifdef __cplusplus
 }
 #endif

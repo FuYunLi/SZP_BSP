@@ -67,6 +67,15 @@ esp_lcd_panel_handle_t bsp_lcd_get_panel_handle(void);
  */
 esp_lcd_panel_io_handle_t bsp_lcd_get_io_handle(void);
 
+/**
+ * @brief 反初始化 LCD 驱动，释放所有资源
+ * 
+ * @note 此函数会释放 SPI 总线、删除面板驱动、释放清屏缓冲区
+ * 
+ * @return esp_err_t ESP_OK 表示成功，其它值表示失败
+ */
+esp_err_t bsp_lcd_deinit(void);
+
 #ifdef __cplusplus
 }
 #endif

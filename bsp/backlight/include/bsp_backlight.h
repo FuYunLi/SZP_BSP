@@ -25,6 +25,12 @@ esp_err_t bsp_backlight_init(void);
  */
 esp_err_t bsp_backlight_set(bool enable);
 
+/**
+ * @brief 反初始化板载屏幕背光引脚
+ * @return esp_err_t ESP_OK 表示成功，其它值表示失败
+ */
+esp_err_t bsp_backlight_deinit(void);
+
 #ifdef __cplusplus
 }
 #endif

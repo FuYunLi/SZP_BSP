@@ -32,6 +32,13 @@ esp_err_t bsp_touch_read(uint16_t *x, uint16_t *y, uint8_t *points_num);
  */
 esp_lcd_touch_handle_t bsp_touch_get_handle(void);
 
+/**
+ * @brief 反初始化板载电容触摸驱动
+ * 
+ * @return esp_err_t ESP_OK 表示成功，其他表示失败
+ */
+esp_err_t bsp_touch_deinit(void);
+
 #ifdef __cplusplus
 }
 #endif

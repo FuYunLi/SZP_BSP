@@ -98,3 +98,27 @@ bool bsp_key_is_pressed(void)
     // GPIO0 按下时为低电平 (0)，故当电平为 0 时返回 true
     return gpio_get_level(0) == 0;
 }
+
+/**
+ * @brief 反初始化板载按键，释放按键设备资源
+ */
+void bsp_key_deinit(void)
+{
+    if (s_btn_handle == NULL)
+    {
+        ESP_LOGW(TAG, "BOOT key not initialized");
+        return;
+    }
+
+    ESP_LOGI(TAG, "Deinitializing BOOT key...");
+
+    // iot_button_delete 会释放按键设备资源
+    esp_err_t err = iot_button_delete(s_btn_handle);
+    if (err != ESP_OK)
+    {
+        ESP_LOGE(TAG, "Failed to delete BOOT key: %s", esp_err_to_name(err));
+    }
+
+    s_btn_handle = NULL;
+    ESP_LOGI(TAG, "BOOT key deinitialized successfully");
+}

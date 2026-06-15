@@ -221,3 +221,60 @@ esp_lcd_panel_io_handle_t bsp_lcd_get_io_handle(void)
 {
     return s_io_handle;
 }
+
+/**
+ * @brief 反初始化 LCD 驱动，释放所有资源
+ */
+esp_err_t bsp_lcd_deinit(void)
+{
+    if (!s_lcd_initialized)
+    {
+        ESP_LOGW(TAG, "LCD 驱动未初始化");
+        return ESP_OK;
+    }
+
+    ESP_LOGI(TAG, "正在反初始化 LCD 驱动...");
+
+    // 1. 释放静态清屏缓冲区
+    if (s_clear_buffer != NULL)
+    {
+        heap_caps_free(s_clear_buffer);
+        s_clear_buffer = NULL;
+    }
+
+    // 2. 删除面板驱动
+    if (s_panel_handle != NULL)
+    {
+        esp_err_t ret = esp_lcd_panel_del(s_panel_handle);
+        if (ret != ESP_OK)
+        {
+            ESP_LOGE(TAG, "删除面板驱动失败: %s", esp_err_to_name(ret));
+        }
+        s_panel_handle = NULL;
+    }
+
+    // 3. 删除面板 IO
+    if (s_io_handle != NULL)
+    {
+        esp_err_t ret = esp_lcd_panel_io_del(s_io_handle);
+        if (ret != ESP_OK)
+        {
+            ESP_LOGE(TAG, "删除面板 IO 失败: %s", esp_err_to_name(ret));
+        }
+        s_io_handle = NULL;
+    }
+
+    // 4. 释放 SPI 总线
+    esp_err_t ret = spi_bus_free(LCD_HOST);
+    if (ret != ESP_OK)
+    {
+        ESP_LOGE(TAG, "释放 SPI 总线失败: %s", esp_err_to_name(ret));
+    }
+
+    // 5. 拉高 LCD_CS 禁用通信（通过 PCA9557）
+    pca9557_set_output_level(0, 1);
+
+    s_lcd_initialized = false;
+    ESP_LOGI(TAG, "LCD 驱动反初始化完成");
+    return ESP_OK;
+}

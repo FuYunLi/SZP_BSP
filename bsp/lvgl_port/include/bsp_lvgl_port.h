@@ -26,6 +26,13 @@ esp_err_t bsp_lvgl_port_init(void);
  */
 lv_display_t *bsp_lvgl_port_get_display(void);
 
+/**
+ * @brief 反初始化 LVGL 移植层，释放所有资源
+ * 
+ * @return esp_err_t ESP_OK 表示成功，其它值表示失败
+ */
+esp_err_t bsp_lvgl_port_deinit(void);
+
 #ifdef __cplusplus
 }
 #endif

@@ -268,3 +268,54 @@ esp_err_t bsp_audio_record_read(void *dest, size_t size, size_t *bytes_read, uin
     }
     return i2s_channel_read(s_rx_handle, dest, size, bytes_read, pdMS_TO_TICKS(timeout_ms));
 }
+
+/**
+ * @brief 反初始化板级音频 I2S 通道及释放所有资源
+ */
+esp_err_t bsp_audio_i2s_deinit(void)
+{
+    if (!s_audio_initialized)
+    {
+        ESP_LOGW(TAG, "音频驱动未初始化");
+        return ESP_OK;
+    }
+
+    ESP_LOGI(TAG, "正在反初始化音频驱动...");
+
+    // 1. 关闭功放使能
+    bsp_audio_pa_enable(false);
+
+    // 2. 删除 ES7210 ADC 句柄
+    if (s_adc_handle != NULL)
+    {
+        es7210_delete(s_adc_handle);
+        s_adc_handle = NULL;
+    }
+
+    // 3. 删除 ES8311 Codec 句柄
+    if (s_codec_handle != NULL)
+    {
+        es8311_delete(s_codec_handle);
+        s_codec_handle = NULL;
+    }
+
+    // 4. 禁用并删除 I2S RX 通道
+    if (s_rx_handle != NULL)
+    {
+        i2s_channel_disable(s_rx_handle);
+        i2s_del_channel(s_rx_handle);
+        s_rx_handle = NULL;
+    }
+
+    // 5. 禁用并删除 I2S TX 通道
+    if (s_tx_handle != NULL)
+    {
+        i2s_channel_disable(s_tx_handle);
+        i2s_del_channel(s_tx_handle);
+        s_tx_handle = NULL;
+    }
+
+    s_audio_initialized = false;
+    ESP_LOGI(TAG, "音频驱动反初始化完成");
+    return ESP_OK;
+}

@@ -58,3 +58,37 @@ esp_err_t bsp_backlight_set(bool enable)
     
     return ESP_OK;
 }
+
+/**
+ * @brief 反初始化板载屏幕背光引脚
+ */
+esp_err_t bsp_backlight_deinit(void)
+{
+    ESP_LOGI(TAG, "Deinitializing backlight GPIO...");
+    
+    // 先关闭背光
+    esp_err_t err = bsp_backlight_set(false);
+    if (err != ESP_OK)
+    {
+        return err;
+    }
+    
+    // 重置 GPIO 配置为输入模式（安全状态）
+    gpio_config_t io_conf = {
+        .pin_bit_mask = (1ULL << BSP_LCD_BL_GPIO),
+        .mode = GPIO_MODE_INPUT,
+        .pull_up_en = GPIO_PULLUP_DISABLE,
+        .pull_down_en = GPIO_PULLDOWN_DISABLE,
+        .intr_type = GPIO_INTR_DISABLE,
+    };
+    
+    err = gpio_config(&io_conf);
+    if (err != ESP_OK)
+    {
+        ESP_LOGE(TAG, "Failed to reset Backlight GPIO: %s", esp_err_to_name(err));
+        return err;
+    }
+    
+    ESP_LOGI(TAG, "Backlight GPIO deinitialized successfully");
+    return ESP_OK;
+}

@@ -63,6 +63,15 @@ esp_err_t bsp_audio_volume_set(uint8_t volume);
  */
 esp_err_t bsp_audio_record_read(void *dest, size_t size, size_t *bytes_read, uint32_t timeout_ms);
 
+/**
+ * @brief 反初始化板级音频 I2S 通道及释放所有资源
+ * 
+ * @note 此函数会关闭功放、删除 I2S 通道、删除 Codec 和 ADC 句柄
+ * 
+ * @return esp_err_t ESP_OK 表示成功，其它值表示失败
+ */
+esp_err_t bsp_audio_i2s_deinit(void);
+
 #ifdef __cplusplus
 }
 #endif
