@@ -6,4 +6,64 @@ menu "Board Support Package (BSP) Configuration"
         help
             GPIO pin number connected to the BOOT key.
 
+    menu "Camera GPIO Configuration"
+        config BSP_CAM_PIN_XCLK
+            int "Camera XCLK (Master Clock) GPIO"
+            default 5
+            help
+                GPIO pin for camera master clock output.
+
+        config BSP_CAM_PIN_VSYNC
+            int "Camera VSYNC GPIO"
+            default 3
+            help
+                GPIO pin for camera vertical sync signal.
+
+        config BSP_CAM_PIN_HREF
+            int "Camera HREF GPIO"
+            default 46
+            help
+                GPIO pin for camera horizontal reference signal.
+
+        config BSP_CAM_PIN_PCLK
+            int "Camera PCLK GPIO"
+            default 7
+            help
+                GPIO pin for camera pixel clock signal.
+
+        config BSP_CAM_PIN_D0
+            int "Camera D0 GPIO"
+            default 16
+        config BSP_CAM_PIN_D1
+            int "Camera D1 GPIO"
+            default 18
+        config BSP_CAM_PIN_D2
+            int "Camera D2 GPIO"
+            default 8
+        config BSP_CAM_PIN_D3
+            int "Camera D3 GPIO"
+            default 17
+        config BSP_CAM_PIN_D4
+            int "Camera D4 GPIO"
+            default 15
+        config BSP_CAM_PIN_D5
+            int "Camera D5 GPIO"
+            default 6
+        config BSP_CAM_PIN_D6
+            int "Camera D6 GPIO"
+            default 4
+        config BSP_CAM_PIN_D7
+            int "Camera D7 GPIO"
+            default 9
+            help
+                GPIO pins for camera 8-bit parallel data bus (D0-D7).
+
+        config BSP_CAM_PCA9557_IO_PWDN
+            int "PCA9557 IO Pin for Camera PWDN Control"
+            default 2
+            help
+                PCA9557 IO expander pin number used to control camera power down.
+                0 = camera active (wake up), 1 = camera standby (power down).
+    endmenu
+
 endmenu
